@@ -2,7 +2,7 @@
 layout: post
 title: "Fixed Length Random numbers in Ruby"
 date: 2008-01-09 18:35
-comments: true
+comments: false
 categories: [Ruby, Rails]
 ---
 

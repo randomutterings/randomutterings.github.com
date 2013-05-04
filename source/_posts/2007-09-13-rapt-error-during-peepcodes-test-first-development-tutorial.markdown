@@ -2,7 +2,7 @@
 layout: post
 title: "Rapt error during peepcodes test first development tutorial"
 date: 2007-09-13 13:57
-comments: true
+comments: false
 categories: [Ruby, Rails]
 ---
 

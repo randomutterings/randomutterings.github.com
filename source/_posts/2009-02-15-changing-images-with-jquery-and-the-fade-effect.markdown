@@ -2,7 +2,7 @@
 layout: post
 title: "Changing images with JQuery and the fade effect"
 date: 2009-02-15 18:47
-comments: true
+comments: false
 categories: []
 ---
 

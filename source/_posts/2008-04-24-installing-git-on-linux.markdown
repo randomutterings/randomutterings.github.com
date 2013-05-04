@@ -2,7 +2,7 @@
 layout: post
 title: "Installing git on linux"
 date: 2008-04-24 18:41
-comments: true
+comments: false
 categories: [Infrastructure, Git]
 ---
 

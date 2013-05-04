@@ -2,7 +2,7 @@
 layout: post
 title: "Undo Git Commit"
 date: 2010-04-18 19:02
-comments: true
+comments: false
 categories: [Git]
 ---
 

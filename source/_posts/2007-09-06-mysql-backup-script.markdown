@@ -2,7 +2,7 @@
 layout: post
 title: "Mysql Backup Script"
 date: 2007-09-06 15:04
-comments: true
+comments: false
 categories: [Infrastructure]
 ---
 

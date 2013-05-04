@@ -2,7 +2,7 @@
 layout: post
 title: "Subversion script for Rails developers"
 date: 2007-09-19 18:32
-comments: true
+comments: false
 categories: [Ruby, Rails, Subversion]
 ---
 

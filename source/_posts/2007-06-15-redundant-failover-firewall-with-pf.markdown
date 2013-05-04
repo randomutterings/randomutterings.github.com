@@ -2,7 +2,7 @@
 layout: post
 title: "Redundant Failover firewall with pf"
 date: 2007-06-15 16:35
-comments: true
+comments: false
 categories: 
 ---
 

@@ -2,7 +2,7 @@
 layout: post
 title: "Pool-party"
 date: 2008-05-31 18:43
-comments: true
+comments: false
 categories: [Infrastructure, Ruby, Rails, EC2]
 ---
 

@@ -2,7 +2,7 @@
 layout: post
 title: "Open Source Wedding"
 date: 2010-03-16 18:58
-comments: true
+comments: false
 categories: [Ruby, Rails]
 ---
 
