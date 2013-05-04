@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Pool-party"
+title: "Pool-party, Auto-scaling with EC2"
 date: 2008-05-31 18:43
 comments: false
 categories: [Infrastructure, Ruby, Rails, EC2]
