@@ -198,3 +198,5 @@ capistrano-multiconfig
 capistrano-uptodate  
 rvm-capistrano  
 caphub
+
+[Comments on Google+](https://plus.google.com/100945199987484580489/posts/NYgqfrSG6DU)
