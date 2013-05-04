@@ -6,7 +6,7 @@ comments: true
 categories: [Capistrano, Deployments, SOA]
 ---
 
-Capistrano is most often used for deploying a single Rails application but with a few libraries you can use it to deploy multiple applications or “services” in a service oriented architecture.  In this article we’ll walk through how to build this type of deployment application with Capistrano.
+Capistrano is most often used for deploying a single Rails application but with a few libraries you can use it to deploy multiple applications or “services” in a service oriented architecture.  In this article I'll walk through how to build this type of deployment application with Capistrano.
 
 <!-- more -->
 
