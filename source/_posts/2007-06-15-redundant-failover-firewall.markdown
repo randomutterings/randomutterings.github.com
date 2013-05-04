@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Redundant Failover firewall with pf"
+title: "Redundant Failover firewall with pf, pfsync and CARP on FreeBSD"
 date: 2007-06-15 16:35
 comments: false
 categories: 
