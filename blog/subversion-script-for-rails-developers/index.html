@@ -1,0 +1,442 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Subversion script for Rails developers - Randomutterings</title>
+  <meta name="author" content="Chris Barnes">
+
+  
+  <meta name="description" content="I read somewhere that good developers use version control. There&#8217;s a good article on HowtoUseRailsWithSubversion. So why should I repeat those &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://randomutterings.github.io/blog/subversion-script-for-rails-developers">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Randomutterings" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="./javascripts/lib/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href='https://fonts.googleapis.com/css?family=Prosto+One' rel='stylesheet' type='text/css'>
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-2807156-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/"><img src="/images/logo.png" alt="Randomutterings" id="logo"></a></h1>
+  
+    <h2>about web development and such</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:randomutterings.github.io" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://www.linkedin.com/in/randomutterings/">Linkedin</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Subversion Script for Rails Developers</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2007-09-19T18:32:00-04:00" pubdate data-updated="true">Sep 19<span>th</span>, 2007</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>I read somewhere that good developers use version control.  There&#8217;s a good article on <a href="http://wiki.rubyonrails.org/rails/pages/HowtoUseRailsWithSubversion">HowtoUseRailsWithSubversion</a>.</p>
+
+<p>So why should I repeat those steps for every new project I work on.</p>
+
+<!-- more -->
+
+
+<p>There is another <a href="http://www.railsonwave.com/railsonwave/2006/12/19/smart-subversion-script-for-rails-projects">article</a> which attempted to tackle this problem.  However, you still have to do the initial steps and then copy this script into your project directory and execute it.</p>
+
+<p>The following script takes it a bit farther.  You call it like this.</p>
+
+<pre><code>rails-svn app_dir repository username
+</code></pre>
+
+<p>So if I wanted to create a new rails project called toejam, I would execute:</p>
+
+<pre><code>rails-svn toejam svn://randomutterings.com/projects/toejam/trunk chris
+</code></pre>
+
+<p>Here&#8217;s what happens under the hood.</p>
+
+<ol>
+<li><p>After checking to make sure the directory doesn&#8217;t already exist, your rails app is created with the standard rails command.  (If the directory already exists, you will be asked if you want to continue.  Choosing yes will allow the script to continue but if this script has been run on the same app twice, all of the svn commits will be duplicated.)</p></li>
+<li><p>Your new app is imported to the subversion repository specified.  Authentication is done with the username provided.  You may be prompted for a password from your repository.</p></li>
+<li><p>The original app directory is deleted and a working copy is checked out from the repository into that directory.</p></li>
+<li><p>All the default rails log files are removed and subversion is instructed to ignore those files.  (Log files can get large and we definitely don&#8217;t need them in version control.)</p></li>
+<li><p>The database.yml is moved to database.example to serve as a template for anyone who checks out the code and any newly created database.yml files are ignored by subversion.  (Doing this will help if you have multiple developers working on the same project in different environments.  It also prevents you from overwriting the database.yml file on the production server, oops!</p></li>
+<li><p>Subversion is told to ignore everything in the tmp folder, the .htaccess files, and the dispatch.fcgi file.</p></li>
+</ol>
+
+
+<p>Without further ado, here&#8217;s the script.  Just copy it and save it somewhere in your path.  /usr/bin is a good choice.  Don&#8217;t forget to chmod 755 so you can execute it.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>  <span class="c">#!/bin/bash</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span> <span class="o">[</span> <span class="s2">&quot;$#&quot;</span> !<span class="o">=</span> <span class="s2">&quot;3&quot;</span> <span class="o">]</span>; <span class="k">then</span>
+</span><span class='line'><span class="k">    </span><span class="nb">echo</span> <span class="s2">&quot;Usage: rails-svn app_dir repository username&quot;</span>
+</span><span class='line'>    <span class="nb">exit </span>1
+</span><span class='line'>  <span class="k">fi</span>
+</span><span class='line'><span class="k">  </span>
+</span><span class='line'><span class="k">  </span><span class="nv">APPDIR</span><span class="o">=</span>./<span class="nv">$1</span>
+</span><span class='line'>  <span class="nv">SVN_TRUNK</span><span class="o">=</span><span class="nv">$2</span>
+</span><span class='line'>  <span class="nv">SVN_USER</span><span class="o">=</span><span class="nv">$3</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">function </span>check_if_exist <span class="o">()</span> <span class="o">{</span>
+</span><span class='line'>    <span class="k">if</span> <span class="o">[[</span> -e <span class="nv">$1</span> <span class="o">]]</span>; <span class="k">then</span>
+</span><span class='line'><span class="k">      </span><span class="nb">echo</span> <span class="s2">&quot;&quot;</span>
+</span><span class='line'>      <span class="nb">echo</span> <span class="s2">&quot;$1 already exists, overwrite? y or n&quot;</span>
+</span><span class='line'>      <span class="nb">echo</span> <span class="s2">&quot;&quot;</span>
+</span><span class='line'>      <span class="nb">read </span>OVERWRITE
+</span><span class='line'>      <span class="k">case</span> <span class="s2">&quot;$OVERWRITE&quot;</span> in
+</span><span class='line'>    y<span class="o">)</span>
+</span><span class='line'>      <span class="nb">echo</span> <span class="s2">&quot;Overwriting...&quot;</span>
+</span><span class='line'>        ;;
+</span><span class='line'>    *<span class="o">)</span>
+</span><span class='line'>      <span class="nb">echo</span> <span class="s2">&quot;Action canceled&quot;</span>
+</span><span class='line'>      <span class="nb">exit </span>1
+</span><span class='line'>        ;;
+</span><span class='line'>      <span class="k">esac</span>
+</span><span class='line'><span class="k">    fi</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>  check_if_exist <span class="k">${</span><span class="nv">APPDIR</span><span class="k">}</span>
+</span><span class='line'>  rails <span class="nv">$APPDIR</span>
+</span><span class='line'>  svn import <span class="nv">$APPDIR</span> <span class="nv">$SVN_TRUNK</span> -m <span class="s2">&quot;Import&quot;</span> --username <span class="nv">$SVN_USER</span>
+</span><span class='line'>  sudo rm -r <span class="nv">$APPDIR</span>
+</span><span class='line'>  svn checkout <span class="nv">$SVN_TRUNK</span> <span class="nv">$APPDIR</span>
+</span><span class='line'>  <span class="nb">cd</span> <span class="nv">$APPDIR</span>
+</span><span class='line'>
+</span><span class='line'>  svn remove log/*
+</span><span class='line'>  svn commit -m <span class="s2">&quot;removing log files&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;*.log&quot;</span> log/
+</span><span class='line'>  svn update log/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring all files in /log/ ending in .log&quot;</span>
+</span><span class='line'>  svn move config/database.yml config/database.example
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Moving database.yml to database.example to provide a template for anyone who checks out the code&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;database.yml&quot;</span> config/
+</span><span class='line'>  svn update config/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring database.yml&quot;</span>
+</span><span class='line'>  svn remove tmp/*
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;*&quot;</span> tmp/
+</span><span class='line'>  svn update tmp/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;ignore tmp/ content from now&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;.htaccess&quot;</span> public/
+</span><span class='line'>  svn update public/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring .htaccess&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;dispatch.fcgi&quot;</span> public/
+</span><span class='line'>  svn update public/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring dispatch.fcgi&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>I&#8217;m interested in converting this into a gem and possibly rewriting it in ruby.  If anyone has the skills and wants to contribute, leave a comment or <a href="mailto:randomutterings@gmail.com">email me</a>.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Chris Barnes</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2007-09-19T18:32:00-04:00" pubdate data-updated="true">Sep 19<span>th</span>, 2007</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/rails/'>Rails</a>, <a class='category' href='/blog/categories/ruby/'>Ruby</a>, <a class='category' href='/blog/categories/subversion/'>Subversion</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://randomutterings.github.io/blog/subversion-script-for-rails-developers/" data-via="randomutterings" data-counturl="http://randomutterings.github.io/blog/subversion-script-for-rails-developers/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/rapt-error-during-peepcodes-test-first-development-tutorial/" title="Previous Post: Rapt error during peepcodes test first development tutorial">&laquo; Rapt error during peepcodes test first development tutorial</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/fixed-length-random-numbers-in-ruby/" title="Next Post: Fixed Length Random numbers in Ruby">Fixed Length Random numbers in Ruby &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/centralized-multi-deployment-approach-with-capistrano/">Centralized multi-deployment approach with Capistrano</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/undo-git-commit/">Undo Git Commit</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/open-source-wedding/">Open Source Wedding</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/changing-images-with-jquery-and-the-fade-effect/">Changing images with JQuery and the fade effect</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/pool-party/">Pool-party, Auto-scaling with EC2</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/randomutterings">@randomutterings</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'randomutterings',
+            count: 2,
+            skip_forks: false,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+
+<section class="googleplus">
+  <h1>
+    <a href="https://plus.google.com/100945199987484580489?rel=author">
+      <img src="http://www.google.com/images/icons/ui/gprofile_button-32.png" width="32" height="32">
+      Google+
+    </a>
+  </h1>
+</section>
+<a href="https://plus.google.com/100945199987484580489?rel=author">
+  <img src="https://www.google.com/s2/photos/profile/100945199987484580489" style="width:70%;" alt="google+ photo">
+</a>
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Written by Chris Barnes -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id; js.async = true;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

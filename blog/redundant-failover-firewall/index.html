@@ -1,0 +1,1275 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Redundant Failover firewall with pf, pfsync and CARP on FreeBSD - Randomutterings</title>
+  <meta name="author" content="Chris Barnes">
+
+  
+  <meta name="description" content="This is a step by step tutorial that should take most of a day. I&#8217;m posting this here mostly as a reminder so that I can come back and read it &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://randomutterings.github.io/blog/redundant-failover-firewall">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Randomutterings" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="./javascripts/lib/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href='https://fonts.googleapis.com/css?family=Prosto+One' rel='stylesheet' type='text/css'>
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-2807156-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/"><img src="/images/logo.png" alt="Randomutterings" id="logo"></a></h1>
+  
+    <h2>about web development and such</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:randomutterings.github.io" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://www.linkedin.com/in/randomutterings/">Linkedin</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Redundant Failover Firewall With Pf, Pfsync and CARP on FreeBSD</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2007-06-15T16:35:00-04:00" pubdate data-updated="true">Jun 15<span>th</span>, 2007</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>This is a step by step tutorial that should take most of a day.  I&#8217;m posting this here mostly as a reminder so that I can come back and read it when I need to build another firewall but hopefully it will be helpful to someone else also.</p>
+
+<!-- more -->
+
+
+<h4>Install FreeBSD</h4>
+
+<p>Download the disc 1 and disc 2 from <a href="ftp://ftp.freebsd.org/pub/FreeBSD/releases/i386/ISO-IMAGES/6.2">ftp://ftp.freebsd.org/pub/FreeBSD/releases/i386/ISO-IMAGES/6.2</a></p>
+
+<p>Burn the iso images to cds and boot the target machine with disc 1.</p>
+
+<p>Start a Standard installation.</p>
+
+<p>Highlight any partitions and hit &#8220;d&#8221; to delete them, then hit &#8220;a&#8221; to use the entire disk, then hit &#8220;q&#8221; to continue.</p>
+
+<p>Choose Standard for no boot manager.</p>
+
+<p>Create partitions.  You can adjust the sizes of the partitions based on the size of your drive. The /usr/local and /usr/home partitions can go as low as 128MB since this won&#8217;t be a common-user system and there won&#8217;t be a lot of user-specific files or binaries&#8230;but the /usr partition should never go below 2,000MB since that&#8217;s where all of your kernel source code and the ports tree is located. Here&#8217;s a partition scheme if you have a 6GB drive:</p>
+
+<pre><code>486MB swap partition (or at least 2x your RAM)
+512MB file system mounted as /
+512MB file system mounted as /tmp
+1267MB file system mounted as /var
+3115MB file system mounted as /usr
+128MB file system mounted as /usr/local
+128MB file system mounted as /usr/home
+</code></pre>
+
+<p>Press q to continue.</p>
+
+<p>Highlight Kern-Developer and press space bar.</p>
+
+<p>When asked about installing the ports collection choose yes.</p>
+
+<p>Highlight exit and press enter.</p>
+
+<p>Choose CD/DVD as the install media.</p>
+
+<p>Last Chance, are you sure? Yes</p>
+
+<p>When you see Congradulations, hit ok.</p>
+
+<h4>FreeBSD Post-Install configuration</h4>
+
+<p>Would you like to configure any ethernet or SLIP/PPP network devices? Yes</p>
+
+<p>Highlight your device that is connected to the internet and press enter.</p>
+
+<p>Do you want to try IPv6? No</p>
+
+<p>Do you want to try DHCP? Yes</p>
+
+<p>Verify network info and update if necessary.</p>
+
+<p>Do you want this machine to function as a gateway? Yes</p>
+
+<p>Do you want to configure inetd and the network services that it provides? No</p>
+
+<p>Would you like to enable SSH login? Yes</p>
+
+<p>Do you want to have anonymous FTP access to this machine? No</p>
+
+<p>Do you want to configure this machine as an NFS Server: No</p>
+
+<p>Do you want to configure this machine as an NFS Client: No</p>
+
+<p>Would you like to customize your system console settings? No</p>
+
+<p>Would you like to set this machine&#8217;s time zone now? Yes</p>
+
+<p>Is your machine&#8217;s CMOS clock is set to UTC? No</p>
+
+<p>Select the appropriate time zone - by region, country, and then the applicable time zone.</p>
+
+<p>Would you like to enable Linux Binary compatibility? No</p>
+
+<p>Does your system have a PS/2, serial, or bus mouse? Yes (unless, of course, it doesn&#8217;t&#8230;)</p>
+
+<p>Would you like to browse the ports collection? Yes</p>
+
+<h4>Install cvsup and bash</h4>
+
+<p>cvsup will be used to keep your system up to date.</p>
+
+<p>Highlight net and press enter.</p>
+
+<p>Highlight cvsup-without-gui and press space bar.</p>
+
+<p>Tab to ok and press enter.</p>
+
+<p>bash is a shell that we will use instead of the default sh</p>
+
+<p>Highlight shells and press enter.</p>
+
+<p>Highlight bash-2 and press space bar.</p>
+
+<p>Tab to ok and press enter.</p>
+
+<p>Tab to Install and press enter
+Review your selections and press enter to install.</p>
+
+<p>Would you like to add any user accounts? Yes (we need at least one so we can dis-allow root ssh access and require you to login as an unprivilaged user and su to root)</p>
+
+<p>Highlight User and press enter.</p>
+
+<p>Type the username, password, full name, and make the member group 0. (this is important so that your new user will be in the &#8216;wheel&#8217; group and they will be able to su to root.  Also make the login shell /usr/local/bin/bash (I will create a user with the username admin so if you do the same you can follow the rest of this tutorial verbatim, otherwise just change admin to your username every time I use it later.</p>
+
+<p>Set the root password.</p>
+
+<p>Would you like to visit the general configuration menu for a chance to set any last options? Yes</p>
+
+<p>Go to network then ntupdate and choose a server near you.</p>
+
+<p>Highlight exit and press enter. (do this twice to get to the main menu)</p>
+
+<p>Tab over to Exit Install and hit enter.</p>
+
+<p>(System Reboots)</p>
+
+<h4>Make &#8220;bash&#8221; the default shell for &#8216;root&#8217; and perform an initial set up of root&#8217;s bash environment.</h4>
+
+<p>Log in as your non-privaleged user account. You should see a &#8216;bash-2.05b$&#8217; prompt&#8230;indicating that bash was successfully installed. After you log in, then type &#8216;su&#8217; to switch user to root. Enter the root password.</p>
+
+<p>Type vipw and press enter.</p>
+
+<p>Change the default shell from /bin/csh (at the end of the first line) to /usr/local/bin/bash.</p>
+
+<p>If you like, you can change root&#8217;s unoffical name from &#8216;Charlie &amp;&#8217; to &#8216;Super-User&#8217; or whatever you like.  When you get mail from root, it will be marked as being from the name that you enter here.</p>
+
+<p>Verify that your changes are successful. Press <Alt>-F2 to get another terminal, then log in as root. Verify that you&#8217;re presented with the &#8216;bash-2.05b#&#8217; prompt. If you are, then log out and go back to the 1st virtual terminal to continue working. If you don&#8217;t see the bash prompt, then you need to go back to the previous step and figure out what you did wrong.</p>
+
+<p>Create a file named .bashrc in /root that contains the following.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="nb">umask </span>077
+</span><span class='line'><span class="nv">PS1</span><span class="o">=</span><span class="s2">&quot;[\u@\h \W]\\$ &quot;</span>
+</span><span class='line'><span class="nb">alias </span><span class="nv">ls</span><span class="o">=</span><span class="s1">&#39;ls -alFG&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Also create a file named .bash_profile in /root that contains the following.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="nv">PATH</span><span class="o">=</span>/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin:/usr/local/sbin:<span class="nv">$HOME</span>/bin; <span class="nb">export </span>PATH
+</span><span class='line'><span class="nb">umask </span>077
+</span><span class='line'><span class="nv">PS1</span><span class="o">=</span><span class="s2">&quot;[\u@\h \W]\\$ &quot;</span>
+</span><span class='line'><span class="nb">alias </span><span class="nv">ls</span><span class="o">=</span><span class="s1">&#39;ls -alFG&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Change the permissions on both files.</p>
+
+<pre><code>chmod 600 .bashrc
+chmod 600 .bash_profile
+</code></pre>
+
+<p>Test your settings again at the 2nd virtual terminal.  Log in as root, verify you&#8217;re using the bash shell, your cursor line looks different (it has your userid and current working directory), and that you have colorized directory listings.  Close that session, return to the 1st virtual terminal, log out, and log back in and su to root.</p>
+
+<p>Copy the files to your non privilaged user change the ownership of the new copies.</p>
+
+<pre><code>cp /root/.bashrc /usr/home/admin/.bashrc
+cp /root/.bash_profile /usr/home/admin/.bash_profile
+chown admin /usr/home/admin/.bashrc
+chown admin /usr/home/admin/.bash_profile
+</code></pre>
+
+<h4>Redirect root&#8217;s email to your email account.</h4>
+
+<pre><code>vi /etc/aliases
+</code></pre>
+
+<p>Uncomment # root: me@my.domain and change me@mydomain to your email address.</p>
+
+<p>Save and exit.</p>
+
+<p>Update the email alias database.</p>
+
+<pre><code>newaliases
+</code></pre>
+
+<h4>Configure cvsup and update your source tree &amp; ports collection.</h4>
+
+<p>After you configure cvsup and update your source and ports collection, you will want to re-run cvsup every once in a while to ensure your sources are up to date,  then recompile your kernel &amp; system binaries to ensure you are using the latest versions with security patches applied.</p>
+
+<pre><code>cp /usr/share/examples/cvsup/stable-supfile /etc
+chmod 600 /etc/stable-supfile
+vi /etc/stable-supfile
+</code></pre>
+
+<p>Type &#8220;:set num&#8221; in vi to see line numbers</p>
+
+<p>Change line 68 to point to a CVS server near you. Here you&#8217;ll find a list of CVSup servers <a href="http://www.freebsd.org/doc/en_US.ISO8859-1/books/handbook/cvsup.html#CVSUP-MIRRORS">http://www.freebsd.org/doc/en_US.ISO8859-1/books/handbook/cvsup.html#CVSUP-MIRRORS</a>.  I ususlly go with cvsup2 or 3 because the main site reaches the maximum number of simultaneous users often.</p>
+
+<p>Add these lines at the bottom of the file:</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>ports-net <span class="nv">tag</span><span class="o">=</span>CHANGE_THIS.FreeBSD.org
+</span><span class='line'>ports-shells <span class="nv">tag</span><span class="o">=</span>CHANGE_THIS.FreeBSD.org
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Syncronize your source tree with the CVS server&#8230;should take 30-60 minutes</p>
+
+<pre><code>cvsup /etc/stable-supfile
+</code></pre>
+
+<p>Configure a custom kernel with support for ph, phsync, pflog, and carp</p>
+
+<pre><code>cd /usr/src/sys/i386/conf
+cp GENERIC FIREWALL
+vi FIREWALL
+</code></pre>
+
+<p>In line 2 of the file (part of the main comment block) change the word, GENERIC, to your hostname, FIREWALL.</p>
+
+<p>On line 19 of the file (still part of the main comment block), change the word, GENERIC, to your hostname, FIREWALL</p>
+
+<p>On lines 22-24, comment out the &#8220;cpu&#8221; lines so that only the one for your specific chip is left.</p>
+
+<p>On line 25, change the value of the ident parameter so that it&#8217;s your hostname, FIREWALL</p>
+
+<p>Add the following lines to the bottom of the file.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c"># pf support</span>
+</span><span class='line'>device pf
+</span><span class='line'>device pfsync
+</span><span class='line'>device pflog
+</span><span class='line'>device carp
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Recompile your kernel to the updated stable version.  (make buildworld will take about an hour and make buildkernel will take about 20 minutes)</p>
+
+<pre><code>[root@firewall /]# cd /usr/src
+[root@firewall src]# echo "KERNCONF=FIREWALL" &gt;&gt; /etc/make.conf
+[root@firewall src]# make buildworld
+[root@firewall src]# make buildkernel
+[root@firewall src]# make installkernel
+</code></pre>
+
+<h4>Configure the SSH daemon and your user&#8217;s DSA key files.</h4>
+
+<p>Modify the SSH daemon configuration file, /etc/ssh/sshd_config, so that it reads as follows.  I&#8217;m using port 8081 for ssh access instead of the usual port 21.  In the past I have had issues with hackers trying to use brute force tactics on my standard ports if they were open.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>Port 8081
+</span><span class='line'>Protocol 2
+</span><span class='line'><span class="c">#AddressFamily any</span>
+</span><span class='line'>ListenAddress 192.168.1.1 <span class="c"># Put your internal interface&#39;s address here</span>
+</span><span class='line'><span class="c">#ListenAddress :: </span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># HostKey for protocol version 1</span>
+</span><span class='line'><span class="c">#HostKey /etc/ssh/ssh_host_key</span>
+</span><span class='line'><span class="c"># HostKeys for protocol version 2</span>
+</span><span class='line'><span class="c">#HostKey /etc/ssh/ssh_host_dsa_key</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Lifetime and size of ephemeral version 1 server key</span>
+</span><span class='line'><span class="c">#KeyRegenerationInterval 1h</span>
+</span><span class='line'><span class="c">#ServerKeyBits 768</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Logging</span>
+</span><span class='line'><span class="c"># obsoletes QuietMode and FascistLogging</span>
+</span><span class='line'><span class="c">#SyslogFacility AUTH</span>
+</span><span class='line'>LogLevel VERBOSE
+</span><span class='line'>
+</span><span class='line'><span class="c"># Authentication:</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">#LoginGraceTime 2m</span>
+</span><span class='line'>PermitRootLogin no
+</span><span class='line'>StrictModes yes
+</span><span class='line'><span class="c">#MaxAuthTries 6</span>
+</span><span class='line'>
+</span><span class='line'>RSAAuthentication yes
+</span><span class='line'>PubkeyAuthentication yes
+</span><span class='line'>AuthorizedKeysFile .ssh/authorized_keys
+</span><span class='line'>
+</span><span class='line'><span class="c"># For this to work you will also need host keys in /etc/ssh/ssh_known_hosts</span>
+</span><span class='line'>RhostsRSAAuthentication no
+</span><span class='line'><span class="c"># similar for protocol version 2</span>
+</span><span class='line'>HostbasedAuthentication no
+</span><span class='line'><span class="c"># Change to yes if you don&#39;t trust ~/.ssh/known_hosts for</span>
+</span><span class='line'><span class="c"># RhostsRSAAuthentication and HostbasedAuthentication</span>
+</span><span class='line'>IgnoreUserKnownHosts yes
+</span><span class='line'><span class="c"># Don&#39;t read the user&#39;s ~/.rhosts and ~/.shosts files</span>
+</span><span class='line'>IgnoreRhosts yes
+</span><span class='line'>
+</span><span class='line'><span class="c"># Change to yes to enable built-in password authentication.</span>
+</span><span class='line'>PasswordAuthentication no
+</span><span class='line'>PermitEmptyPasswords no
+</span><span class='line'>
+</span><span class='line'><span class="c"># Change to no to disable PAM authentication</span>
+</span><span class='line'>ChallengeResponseAuthentication no
+</span><span class='line'>
+</span><span class='line'><span class="c"># Kerberos options</span>
+</span><span class='line'><span class="c">#KerberosAuthentication no</span>
+</span><span class='line'><span class="c">#KerberosOrLocalPasswd yes</span>
+</span><span class='line'><span class="c">#KerberosTicketCleanup yes</span>
+</span><span class='line'><span class="c">#KerberosGetAFSToken no</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># GSSAPI options</span>
+</span><span class='line'><span class="c">#GSSAPIAuthentication no</span>
+</span><span class='line'><span class="c">#GSSAPICleanupCredentials yes</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Set this to &#39;no&#39; to disable PAM authentication, account processing,</span>
+</span><span class='line'><span class="c"># and session processing. If this is enabled, PAM authentication will</span>
+</span><span class='line'><span class="c"># be allowed through the ChallengeResponseAuthentication and</span>
+</span><span class='line'><span class="c"># PasswordAuthentication. Depending on your PAM configuration,</span>
+</span><span class='line'><span class="c"># PAM authentication via ChallengeResponseAuthentication may bypass</span>
+</span><span class='line'><span class="c"># the setting of &quot;PermitRootLogin without-password&quot;.</span>
+</span><span class='line'><span class="c"># If you just want the PAM account and session checks to run without</span>
+</span><span class='line'><span class="c"># PAM authentication, then enable this but set PasswordAuthentication</span>
+</span><span class='line'><span class="c"># and ChallengeResponseAuthentication to &#39;no&#39;.</span>
+</span><span class='line'>UsePAM no
+</span><span class='line'>
+</span><span class='line'>AllowTcpForwarding no
+</span><span class='line'>GatewayPorts no
+</span><span class='line'>X11Forwarding no
+</span><span class='line'><span class="c">#X11DisplayOffset 10</span>
+</span><span class='line'><span class="c">#X11UseLocalhost yes</span>
+</span><span class='line'><span class="c">#PrintMotd yes</span>
+</span><span class='line'>PrintLastLog yes
+</span><span class='line'><span class="c">#TCPKeepAlive yes</span>
+</span><span class='line'><span class="c">#UseLogin no</span>
+</span><span class='line'><span class="c">#UsePrivilegeSeparation yes</span>
+</span><span class='line'><span class="c">#PermitUserEnvironment no</span>
+</span><span class='line'><span class="c">#Compression delayed</span>
+</span><span class='line'><span class="c">#ClientAliveInterval 0</span>
+</span><span class='line'><span class="c">#ClientAliveCountMax 3</span>
+</span><span class='line'><span class="c">#UseDNS yes</span>
+</span><span class='line'><span class="c">#PidFile /var/run/sshd.pid</span>
+</span><span class='line'><span class="c">#MaxStartups 10</span>
+</span><span class='line'><span class="c">#PermitTunnel no</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># no default banner path</span>
+</span><span class='line'><span class="c">#Banner /some/path</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># override default of no subsystems</span>
+</span><span class='line'>Subsystem sftp /usr/libexec/sftp-server
+</span><span class='line'>
+</span><span class='line'><span class="c"># Example of overriding settings on a per-user basis</span>
+</span><span class='line'><span class="c">#Match User anoncvs</span>
+</span><span class='line'><span class="c"># X11Forwarding no</span>
+</span><span class='line'><span class="c"># AllowTcpForwarding no</span>
+</span><span class='line'><span class="c"># ForceCommand cvs server</span>
+</span><span class='line'>AllowUsers admin <span class="c"># Substitute your non-privilaged user for admin</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Generate an SSH key (version 2) for your user, by performing the following steps:</p>
+
+<pre><code>[root@firewall /root]# su - admin          *** substitute your non-privileged userid for 'admin'
+[admin@firewall admin]$ ssh-keygen -d   *** then accept the default DSA key name &amp; enter a passphrase (twice)
+</code></pre>
+
+<p>Add the public copy of your user&#8217;s version 2 key to their own authorized_keys file by typing the following steps:</p>
+
+<pre><code>[admin@firewall admin]$ cd .ssh
+[admin@firewall .ssh]$ cat id_dsa.pub &gt; authorized_keys
+</code></pre>
+
+<p>Copy your user&#8217;s private &amp; public keys to other systems that you&#8217;ll be using to SSH to your new firewall from. By default, the private &amp; public key go into a user&#8217;s &#8216;.ssh&#8217; directory on those systems. Without the private key on those remote systems, your firewall will not accept connections from them. If you&#8217;re new to FreeBSD and need to know how to access the floppy drive, follow the following steps.</p>
+
+<pre><code>[root@firewall root]# mkdir /mnt/floppy                     # This will make an empty mount point to mount the floppy to
+[root@firewall root]# mount -t msdosfs /dev/fd0 /mnt/floppy # Insert a DOS-formatted floppy before you do this
+[root@firewall root]# cd /mnt/floppy
+[root@firewall floppy]# cp /home/admin/.ssh/id_dsa* .       # Copies all of your user's ssh key info to the floppy
+[root@firewall floppy]# ls                                  # List the contents of the floppy to verify the files are there
+[root@firewall floppy]# cd .. 
+[root@firewall mnt]# umount /mnt/floppy                     # Unmount the floppy
+</code></pre>
+
+<p>Now that you&#8217;ve copied your user&#8217;s private &amp; public keys to another system, remove them from your user&#8217;s .ssh directory on the firewall. This is only a precaution so that it can&#8217;t be stolen by a hacker and compromised.</p>
+
+<p>Open up your /etc/hosts.allow file, delete all of the lines, and ensure that it reads as follows.  Note that 192.168.1.0 is the address space of your internal network in this example.  If you&#8217;re using a different internal address space (e.g. 10.10.10.0), then make the appropriate modifications.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c"># hosts.allow access control file for &quot;tcp wrapped&quot; applications.</span>
+</span><span class='line'>ALL : localhost 127.0.0.1 : allow
+</span><span class='line'>sshd : 192.168.1.0/255.255.255.0 : allow
+</span><span class='line'>ALL : ALL : deny
+</span><span class='line'><span class="c"># If you want to allow a specific computer on the Internet to SSH into your</span>
+</span><span class='line'><span class="c"># system, replace the &#39;sshd&#39; line above with one like this...but subsitute</span>
+</span><span class='line'><span class="c"># the X.X.X.X and subnet mask to suit your needs (e.g. one computer, entire subnet</span>
+</span><span class='line'><span class="c"># etc.). Also, make sure you allow inbound SSH from that same host/subnet</span>
+</span><span class='line'><span class="c"># in your /etc/ipf.rules file.</span>
+</span><span class='line'><span class="c"># sshd : 192.168.1.0/255.255.255.0 X.X.X.X/255.255.255.255 : allow</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Install and configure AIDE (Advanced Intrusion Detection Environment)</h4>
+
+<pre><code>[root@firewall /root]# cd /usr/ports/security/aide
+[root@firewall aide]# make install clean
+[root@firewall aide]# cp /usr/local/etc/aide.conf.sample /var/db/aide/aide.conf
+[root@firewall aide]# cd /var/db/aide
+[root@firewall aide]# aide --init
+[root@firewall aide]# mv databases/aide.db.new databases/aide.db
+</code></pre>
+
+<p>Create a cron job to check the integrity of your system every Sunday at 4AM:</p>
+
+<pre><code>[root@firewall /root]# cd /etc
+[root@firewall /etc]# vi crontab
+</code></pre>
+
+<p>Add the following line to the file:</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>0   4   *   *   7    root   /usr/local/bin/aide --check
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Restrict crontab access/usage</h4>
+
+<p>Create the file /var/cron/allow and add the following lines to it. Be sure to substitute &#8216;newuser&#8217; for whatever your non-privileged user account is.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>root
+</span><span class='line'>newuser
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit /etc/crontab and comment out the &#8216;at&#8217; job that runs every 5 minutes.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>*/5 * * * * root /usr/libexec/atrun
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Chmod your /etc/crontab file so that it is only readable by root.</p>
+
+<pre><code>[root@firewall /etc]# chmod 600 /etc/crontab
+</code></pre>
+
+<h4>Edit your /etc/rc.conf to look like this</h4>
+
+<p>This is my rc.conf file.  Your network interfaces will be named differently if you have different cards (e.g. xl0 and xl1 are 3com network cards in my machine and rl0 is an integrated NE2000 network card)</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="nv">icmp_drop_redirects</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">ntpdate_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">ntpdate_flags</span><span class="o">=</span><span class="s2">&quot;north-america.pool.ntp.org&quot;</span>
+</span><span class='line'><span class="nv">sshd_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">usbd_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">syslogd_flags</span><span class="o">=</span><span class="s2">&quot;-ss&quot;</span>
+</span><span class='line'><span class="nv">sshd_flags</span><span class="o">=</span><span class="s2">&quot;-4&quot;</span>
+</span><span class='line'><span class="nv">pf_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">pf_rules</span><span class="o">=</span><span class="s2">&quot;/etc/pf.conf&quot;</span>
+</span><span class='line'><span class="nv">pf_flags</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+</span><span class='line'><span class="nv">pflog_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">pflog_logfile</span><span class="o">=</span><span class="s2">&quot;/var/log/pflog&quot;</span>
+</span><span class='line'><span class="nv">pflog_flags</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+</span><span class='line'><span class="nv">kern_securelevel_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">kern_securelevel</span><span class="o">=</span><span class="s2">&quot;2&quot;</span>
+</span><span class='line'><span class="nv">dhcpd_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">gateway_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">defaultrouter</span><span class="o">=</span><span class="s2">&quot;208.180.xxx.xxx&quot;</span>
+</span><span class='line'><span class="nv">hostname</span><span class="o">=</span><span class="s2">&quot;dell_firewall&quot;</span>
+</span><span class='line'><span class="nv">network_interfaces</span><span class="o">=</span><span class="s2">&quot;xl0 xl1 rl0 lo0 pfsync0&quot;</span>
+</span><span class='line'><span class="nv">cloned_interfaces</span><span class="o">=</span><span class="s2">&quot;carp0 carp1 carp2&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Loopback Interface</span>
+</span><span class='line'><span class="nv">ifconfig_lo0</span><span class="o">=</span><span class="s2">&quot;inet 127.0.0.1&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># External Public Interface (for the secondary firewall use a different public ip.)</span>
+</span><span class='line'><span class="nv">ifconfig_xl0</span><span class="o">=</span><span class="s2">&quot;208.180.xxx.xxx&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># External Public Carp Interface</span>
+</span><span class='line'><span class="nv">ifconfig_carp0</span><span class="o">=</span><span class="s2">&quot;208.180.xxx.xxx vhid 1 pass foo&quot;</span>
+</span><span class='line'><span class="nv">ifconfig_carp0_alias0</span><span class="o">=</span><span class="s2">&quot;208.180.xxx.xxx vhid 1 pass foo&quot;</span>
+</span><span class='line'><span class="nv">ifconfig_carp0_alias1</span><span class="o">=</span><span class="s2">&quot;208.180.xxx.xxx vhid 1 pass foo&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Internal Interface (for the secondary firewall change the ip address to 192.168.1.251)</span>
+</span><span class='line'><span class="nv">ifconfig_xl1</span><span class="o">=</span><span class="s2">&quot;192.168.1.250&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Internal Carp Interface</span>
+</span><span class='line'><span class="nv">ifconfig_carp1</span><span class="o">=</span><span class="s2">&quot;192.168.1.1 vhid 2 pass foo&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Heartbeat Interface (for the secondary firewall, change the ip address to 10.10.10.251)</span>
+</span><span class='line'><span class="nv">ifconfig_rl0</span><span class="o">=</span><span class="s2">&quot;10.10.10.250&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">#Heartbeat Carp Interface</span>
+</span><span class='line'><span class="nv">ifconfig_carp2</span><span class="o">=</span><span class="s2">&quot;10.10.10.1 vhid 3 pass foo&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># PFSync Interface</span>
+</span><span class='line'><span class="nv">ifconfig_pfsync0</span><span class="o">=</span><span class="s2">&quot;up syncif rl0&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Add the following lines to the bottom of /etc/sysctl.conf</h4>
+
+<p>Type ifconfig with no parameters to view your network configuration.  Each real interface should have a line that says status: active when the ethernet cable is plugged in.  If any of them do not, then preempt will not work.  Note that the changes we made to rc.conf do not show up because we have not rebooted yet.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>net.inet.tcp.blackhole<span class="o">=</span>2
+</span><span class='line'>net.inet.udp.blackhole<span class="o">=</span>1
+</span><span class='line'>
+</span><span class='line'><span class="c"># if one interface fails then all will fail over</span>
+</span><span class='line'>net.inet.carp.preempt<span class="o">=</span>1
+</span><span class='line'>
+</span><span class='line'>net.inet.tcp.sendspace<span class="o">=</span>65536
+</span><span class='line'>net.inet.tcp.recvspace<span class="o">=</span>65536
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Configure the main firewall /etc/pf.conf</h4>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="c"># Macro and lists</span>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="nv">lop_if</span>  <span class="o">=</span><span class="s2">&quot;lo0&quot;</span>
+</span><span class='line'><span class="nv">pfs_if</span>  <span class="o">=</span><span class="s2">&quot;dc0&quot;</span>
+</span><span class='line'><span class="nv">ext_if</span>  <span class="o">=</span><span class="s2">&quot;xl0&quot;</span>
+</span><span class='line'><span class="nv">int_if</span>  <span class="o">=</span><span class="s2">&quot;xl1&quot;</span>
+</span><span class='line'><span class="nv">ext_carp</span> <span class="o">=</span><span class="s2">&quot;carp0&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="nv">dns_srv</span>  <span class="o">=</span> <span class="s2">&quot;{ 208.180.xxx.xxx, 208.180.xxx.xxx }&quot;</span>
+</span><span class='line'><span class="nv">int_fw</span>   <span class="o">=</span> <span class="s2">&quot;{ 208.180.xxx.xxx 192.168.1.1 }&quot;</span>
+</span><span class='line'><span class="nv">chat_srv</span> <span class="o">=</span> <span class="s2">&quot;{ 192.168.1.119 }&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Allowed incoming ICMP types</span>
+</span><span class='line'><span class="nv">icmp_types</span> <span class="o">=</span> <span class="s2">&quot;{ echorep, echoreq, timex, paramprob, unreach code needfrag }&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Private networks (RFC 1918)</span>
+</span><span class='line'><span class="nv">priv_nets</span> <span class="o">=</span> <span class="s2">&quot;{ 127.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12, 10.0.0.0/8 }&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="nv">mail_ports</span>         <span class="o">=</span> <span class="s2">&quot;{ 25, 110 }&quot;</span>
+</span><span class='line'><span class="nv">web_ports</span>          <span class="o">=</span> <span class="s2">&quot;{ www, https }&quot;</span>
+</span><span class='line'><span class="nv">ftp_ports</span>          <span class="o">=</span> <span class="s2">&quot;{ 8084 9000 9001 }&quot;</span>
+</span><span class='line'><span class="nv">firewall_ssh_ports</span> <span class="o">=</span> <span class="s2">&quot;{ 8081 }&quot;</span>
+</span><span class='line'><span class="nv">web_ssh_ports</span>      <span class="o">=</span> <span class="s2">&quot;{ 8082 }&quot;</span>
+</span><span class='line'><span class="nv">chat_ports</span>         <span class="o">=</span> <span class="s2">&quot;{ 8080 }&quot;</span>
+</span><span class='line'><span class="nv">dns_ports</span>          <span class="o">=</span> <span class="s2">&quot;{ 53 }&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="c"># Options, scrub and NAT</span>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="nb">set </span>block-policy drop
+</span><span class='line'><span class="nb">set </span>skip on <span class="nv">$lop_if</span>
+</span><span class='line'>
+</span><span class='line'>scrub in
+</span><span class='line'>
+</span><span class='line'><span class="c"># NAT outgoing connections</span>
+</span><span class='line'>nat on <span class="nv">$ext_if</span> from <span class="nv">$int_if</span>:network to any -&gt; <span class="nv">$ext_if</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="c"># Redirection</span>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to <span class="nv">$ext_carp</span> port <span class="nv">$chat_ports</span> -&gt; <span class="nv">$chat_srv</span>
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to <span class="nv">$ext_carp</span> port <span class="nv">$ftp_ports</span> -&gt; 192.168.1.80
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to <span class="nv">$ext_carp</span> port <span class="nv">$mail_ports</span> -&gt; 192.168.1.80
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to <span class="nv">$ext_carp</span> port <span class="nv">$web_ssh_ports</span> -&gt; 192.168.1.80
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to 208.180.xxx.xxx port <span class="nv">$web_ports</span> -&gt; 192.168.1.80
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to 208.180.xxx.xxx port <span class="nv">$web_ports</span> -&gt; 192.168.1.81
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to 208.180.xxx.xxx port <span class="nv">$web_ports</span> -&gt; 192.168.1.82
+</span><span class='line'>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="c"># Filtering Rules</span>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'>block log all
+</span><span class='line'>antispoof quick <span class="k">for</span> <span class="nv">$int_if</span>
+</span><span class='line'>
+</span><span class='line'>pass in quick on <span class="nv">$ext_if</span> inet proto tcp from 208.180.xxx.xxx to <span class="nv">$int_fw</span> port <span class="nv">$firewall_ssh_ports</span> keep state
+</span><span class='line'>
+</span><span class='line'>pass in quick on <span class="nv">$int_if</span> inet proto udp from any to any port 123 keep state
+</span><span class='line'>pass out quick on <span class="nv">$ext_if</span> inet proto udp from any to any port 123 keep state
+</span><span class='line'>
+</span><span class='line'>pass quick on <span class="nv">$pfs_if</span> proto pfsync
+</span><span class='line'>pass quick proto carp
+</span><span class='line'>
+</span><span class='line'>block in quick on <span class="nv">$ext_if</span> from <span class="nv">$priv_nets</span> to any
+</span><span class='line'>block out quick on <span class="nv">$ext_if</span> from any to <span class="nv">$priv_nets</span>
+</span><span class='line'>
+</span><span class='line'>pass in quick on <span class="nv">$ext_if</span> inet proto tcp from any to <span class="nv">$int_if</span>:network port <span class="nv">$mail_ports</span> <span class="se">\</span>
+</span><span class='line'>     synproxy state
+</span><span class='line'>pass out quick on <span class="nv">$int_if</span> inet proto tcp from any to <span class="nv">$int_if</span>:network port <span class="nv">$mail_ports</span> <span class="se">\</span>
+</span><span class='line'>     keep state
+</span><span class='line'>pass in quick on <span class="nv">$int_if</span> inet proto tcp from <span class="nv">$int_if</span>:network port <span class="nv">$mail_ports</span> to any <span class="se">\</span>
+</span><span class='line'>     keep state
+</span><span class='line'>pass out quick on <span class="nv">$ext_if</span> inet proto tcp from <span class="nv">$int_if</span>:network port <span class="nv">$mail_ports</span> to any <span class="se">\</span>
+</span><span class='line'>     modulate state
+</span><span class='line'>
+</span><span class='line'>pass in  quick on <span class="nv">$ext_if</span> inet proto tcp from any to <span class="nv">$int_if</span>:network port <span class="nv">$web_ports</span> <span class="se">\</span>
+</span><span class='line'>     synproxy state
+</span><span class='line'>pass out quick on <span class="nv">$int_if</span> inet proto tcp from any to <span class="nv">$int_if</span>:network port <span class="nv">$web_ports</span> <span class="se">\</span>
+</span><span class='line'>     keep state
+</span><span class='line'>
+</span><span class='line'>pass in quick on <span class="nv">$ext_if</span> inet proto tcp from any to <span class="nv">$chat_srv</span> port <span class="nv">$chat_ports</span> <span class="se">\</span>
+</span><span class='line'>     synproxy state
+</span><span class='line'>pass out quick on <span class="nv">$int_if</span> inet proto tcp from any to <span class="nv">$chat_srv</span> port <span class="nv">$chat_ports</span> <span class="se">\</span>
+</span><span class='line'>     keep state
+</span><span class='line'>
+</span><span class='line'>pass in  quick inet proto icmp all icmp-type <span class="nv">$icmp_types</span>
+</span><span class='line'>pass out quick inet proto icmp all
+</span><span class='line'>
+</span><span class='line'>pass in quick on <span class="nv">$int_if</span> inet proto <span class="o">{</span> tcp, udp <span class="o">}</span> from <span class="nv">$int_if</span>:network to <span class="nv">$dns_srv</span> port domain keep state
+</span><span class='line'>
+</span><span class='line'>pass out quick on <span class="nv">$ext_if</span> inet proto <span class="o">{</span> tcp, udp <span class="o">}</span> from <span class="o">{</span> <span class="nv">$ext_if</span> <span class="nv">$int_if</span>:network<span class="o">}</span> to <span class="nv">$dns_srv</span> port domain keep state
+</span><span class='line'>
+</span><span class='line'>pass in  quick on <span class="nv">$int_if</span> inet proto tcp from <span class="nv">$int_if</span>:network to any port <span class="nv">$web_ports</span>
+</span><span class='line'>pass out quick on <span class="nv">$ext_if</span> inet proto tcp from <span class="o">{</span> <span class="nv">$ext_if</span> <span class="nv">$int_if</span>:network <span class="o">}</span> to any port <span class="nv">$web_ports</span> <span class="se">\</span>
+</span><span class='line'>     modulate state
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Configure the system to mount partitions restrictive</h4>
+
+<p>Modify the /etc/fstab file with vi so that we can change how each partition is mounted&#8230;to ensure that hackers can do at little as possible if they (by chance alone) hack the box. Essentially, we&#8217;re restricting some of the partitions so that they are &#8216;nosuid&#8217;, &#8216;noexec&#8217;, and &#8216;ro&#8217;. The original /etc/fstab should look something like this. Yours might look a little different&#8230;the first column (device names) might be a little different, but that&#8217;s OK. The stuff we&#8217;ll be modifying is in the 4th column.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c"># Device    Mountpoint  FStype  Options   Dump  Pass#</span>
+</span><span class='line'>/dev/ad0s1b none        swap    sw        0     0
+</span><span class='line'>/dev/ad0s1a /           ufs     rw        1     1
+</span><span class='line'>/dev/ad0s1d /tmp        ufs     rw        2     2
+</span><span class='line'>/dev/ad0s1f /usr        ufs     rw        2     2
+</span><span class='line'>/dev/ad0s1h /usr/home   ufs     rw        2     2
+</span><span class='line'>/dev/ad0s1g /usr/local  ufs     rw        2     2
+</span><span class='line'>/dev/ad0s1e /var        ufs     rw        2     2
+</span><span class='line'>/dev/acd0   /cdrom      cd9660  ro,noauto 0     0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>First, copy the original /etc/fstab file to /etc/fstab.original<br>
+Then, make another copy of the /etc/fstab file and call it /etc/fstab.restrictive<br>
+Then, modify the /etc/fstab.restrictive file so that it reads as follows:</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c"># Device    Mountpoint  FStype  Options                 Dump  Pass#</span>
+</span><span class='line'>/dev/ad0s1b none        swap    sw                      0     0
+</span><span class='line'>/dev/ad0s1a /           ufs     rw,nosuid               1     1
+</span><span class='line'>/dev/ad0s1d /tmp        ufs     rw,noexec,nosuid,nodev  2     2
+</span><span class='line'>/dev/ad0s1f /usr        ufs     ro                      2     2
+</span><span class='line'>/dev/ad0s1h /usr/home   ufs     rw,noexec,nosuid        2     2
+</span><span class='line'>/dev/ad0s1g /usr/local  ufs     ro,nosuid               2     2
+</span><span class='line'>/dev/ad0s1e /var        ufs     rw,noexec,nosuid        2     2
+</span><span class='line'>/dev/acd0   /cdrom      cd9660  ro,noauto               0     0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Next, copy your new /etc/fstab.restrictive file and over-write the original /etc/fstab&#8230;so that your &#8220;real&#8221; fstab file has the restrictive settings, and you have the two other config files available (the original and restrictive one).</p>
+
+<pre><code>[root@firewall etc]# cp /etc/fstab.restrictive /etc/fstab
+</code></pre>
+
+<p>This will make adding new software, etc. much more difficult since /usr and /usr/local are mounted read-only. This means that programs which try to install their user-land programs in /usr/local/bin will fail during their install programs. And cvsup&#8230;which will try to update the kernel&#8217;s source code in /usr/src and the ports in /usr/ports&#8230;well, they&#8217;re now read-only because they fall under /usr. So, mounting your partitions in a very restrictive way will limit what the hacker can do on your system, but it makes software installs and kernel upgrades more difficult (or impossible&#8230;if the partitions are still mounted in a restrictive way).</p>
+
+<p>Given that, if you want to add new software or upgrade the kernel &amp; ports tree source code, you&#8217;ll need to</p>
+
+<ol>
+<li>Change the partition&#8217;s mounting in /etc/fstab back to their original values by copying your /etc/fstab.original file to /etc/fstab.</li>
+<li>Bump the kernel security level back down to &#8220;1&#8221; by setting the kern_securelevel paramater in your /etc/rc.conf file, and then</li>
+<li>Reboot the machine (this will not cause downtime because the secondary firewall will take over while this machine is rebooting)</li>
+<li>Update your sources with cvsup, then make buildworld, make buildkernel, and make installworld</li>
+</ol>
+
+
+<p>Then when you&#8217;re done upgrading, recompiling, and installing, do the steps in reverse:</p>
+
+<ol>
+<li>Change the partition&#8217;s mounting in /etc/fstab to their restrictive values by copying your /etc/fstab.restrictive file to /etc/fstab.</li>
+<li>Bump the kernel security level back up to &#8220;2&#8221; by setting the kern_securelevel paramater in your /etc/rc.conf file, and then</li>
+<li>Reboot the machine</li>
+</ol>
+
+
+<p>This is the price you pay for a VERY, VERY secure machine. Reboot the machine so we can finish the job&#8230;</p>
+
+<pre><code>[root@firewall /etc]# shutdown -r now
+</code></pre>
+
+<p>If the system doesn&#8217;t reboot, it means that you probably made an error in the kernel configuration file&#8230;possibly setting the wrong type of CPU. DON&#8217;T PANIC. We can still boot the machine so that you can fix the error. To boot into the original version of the kernel, following the steps, below:</p>
+
+<p>Reboot the machine (power off, then on)
+When you reboot the machine and get to the bootloader screen, select option 6, &#8220;Escape to loader prompt&#8221;. This will give you an &#8220;OK&#8221; prompt at the bottom of the screen. Boot from your &#8220;old&#8221; kernel.</p>
+
+<pre><code>OK unload
+OK boot /boot/kernel.old/kernel
+</code></pre>
+
+<p>After the old kernel boots, you&#8217;ll want to copy the &#8220;old&#8221; kernel to a safe place before you recompile a new kernel. This is an important thing to do since &#8220;kernel.old&#8221; is overwritten when you install a new kernel. To do this, type the following commands:</p>
+
+<pre><code>[root@firewall /]# cp -R /boot/kernel.old /boot/kernel.good
+</code></pre>
+
+<p>If subsequent kernel compiles still don&#8217;t work, you can always manually boot off your good kernel from the &#8220;OK&#8221; prompt until you resolve the problem&#8230;just substitute &#8220;kernel.good&#8221; for &#8220;kernel.old&#8221; in the commands listed above.</p>
+
+<p>Now that you&#8217;ve saved a copy of your &#8220;good&#8221; kernel, modify your kernel configuration file and fix whatever was causing the problems, recompile &amp; install, and then reboot and continue with the next step.</p>
+
+<p>After the system comes back up, you&#8217;ll want to re-generate the AIDE database and replace the old one. Since you updated the kernal and all of the system binaries, the AIDE database signatures of those files is out of date. If you don&#8217;t update the AIDE database, AIDE will find thousands of &#8220;changes&#8221; to the system binaries when it runs for the first time at 4AM in the morning. To update the database so that it has signatures for the newest kernel &amp; system binaries, etc, just type the following commands:</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="o">[</span>root@firewall /<span class="o">]</span><span class="c"># cd /var/db/aide</span>
+</span><span class='line'><span class="o">[</span>root@firewall aide<span class="o">]</span><span class="c"># aide --init</span>
+</span><span class='line'><span class="o">[</span>root@firewall aide<span class="o">]</span><span class="c"># mv databases/aide.db.new databases/aide.db</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After you do this you should have a completely working firewall.</p>
+
+<h4>Resources</h4>
+
+<p><a href="http://www.countersiege.com/doc/pfsync-carp/#configuration">Failover Firewall HowTo</a><br/>
+<a href="http://www.schlacter.net/public/FreeBSD-STABLE_and_IPFILTER.html">How to Build a FreeBSD-STABLE Firewall with IPFILTER</a><br/>
+<a href="http://www.familywilson.ca/pf-carp-freebsd-redundant-firewall/">Redundant Failover Firewall with pf, pfsync and CARP under FreeBSD.</a></p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Chris Barnes</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2007-06-15T16:35:00-04:00" pubdate data-updated="true">Jun 15<span>th</span>, 2007</time>
+      
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://randomutterings.github.io/blog/redundant-failover-firewall/" data-via="randomutterings" data-counturl="http://randomutterings.github.io/blog/redundant-failover-firewall/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+      
+        <a class="basic-alignment right" href="/blog/mysql-backup-script/" title="Next Post: Mysql Backup Script">Mysql Backup Script &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/centralized-multi-deployment-approach-with-capistrano/">Centralized multi-deployment approach with Capistrano</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/undo-git-commit/">Undo Git Commit</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/open-source-wedding/">Open Source Wedding</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/changing-images-with-jquery-and-the-fade-effect/">Changing images with JQuery and the fade effect</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/pool-party/">Pool-party, Auto-scaling with EC2</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/randomutterings">@randomutterings</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'randomutterings',
+            count: 2,
+            skip_forks: false,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+
+<section class="googleplus">
+  <h1>
+    <a href="https://plus.google.com/100945199987484580489?rel=author">
+      <img src="http://www.google.com/images/icons/ui/gprofile_button-32.png" width="32" height="32">
+      Google+
+    </a>
+  </h1>
+</section>
+<a href="https://plus.google.com/100945199987484580489?rel=author">
+  <img src="https://www.google.com/s2/photos/profile/100945199987484580489" style="width:70%;" alt="google+ photo">
+</a>
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Written by Chris Barnes -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id; js.async = true;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Infrastructure | Randomutterings]]></title>
+  <link href="http://randomutterings.github.io/blog/categories/infrastructure/atom.xml" rel="self"/>
+  <link href="http://randomutterings.github.io/"/>
+  <updated>2014-02-14T22:11:32-05:00</updated>
+  <id>http://randomutterings.github.io/</id>
+  <author>
+    <name><![CDATA[Chris Barnes]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Pool-party, Auto-scaling with EC2]]></title>
+    <link href="http://randomutterings.github.io/blog/pool-party/"/>
+    <updated>2008-05-31T18:43:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/pool-party</id>
+    <content type="html"><![CDATA[<p><img src="http://blog.randomutterings.com/images/articles/489184472_214de5bfee.jpg" alt="jump in" /></p>
+
+<p>Photo by <a href="%22http://www.flickr.com/photos/mancake/489184472/">hrlndspnks</a></p>
+
+<p>Having a great time at Railsconf08.  Meeting some great people and learning a lot.  I plan to post in more detail about a lot of this after the conference but I wanted to go ahead and mention one of the coolest presentations I've seen so far.</p>
+
+<p>Ari Lerner has created a ruby gem called pool-party.  It auto-scales your ec2 cluster based on criteria you set in the config file like average requests per second.  Set your minimum requests per second and if the average of all the servers on your cluster goes over the maximum, pool-party will launch another instance for you.  It scales down in the same way.  It doesn't care what you're using your cluster for and a its going to support plugins soon so you can add in your own hook like functionality.  Pool-party is using s3fuse to mount an s3 bucket on the instance  at startup.  Specify a bucket in pool-party and it gets mounted at /data on each instance.  This solves the data persistence issue with ec2.  You're not required to use it though, just don't specify a bucket in pool-party and nothing gets mounted.</p>
+
+<p>Ari open-sourced Pool Party as of 2 days ago.  Check it out at poolpartyrb.com.  If you want to contribute, its on github at <a href="http://github.com/auser/pool-party">http://github.com/auser/pool-party</a>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Installing git on linux]]></title>
+    <link href="http://randomutterings.github.io/blog/installing-git-on-linux/"/>
+    <updated>2008-04-24T18:41:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/installing-git-on-linux</id>
+    <content type="html"><![CDATA[<p>Trying to install git from source on our linux server (we're running RHEL4 at work) and I was getting an error running make.</p>
+
+<pre><code>undefined reference to `libiconv'
+</code></pre>
+
+<p>Running make like this worked.</p>
+
+<pre><code>make install CFLAGS="-liconv"
+</code></pre>
+
+<p>But after the install was finished, running git barfed at me about loading a shared library libiconv.so.2.</p>
+
+<p>I had to edit /etc/ld.so.conf and add /usr/local/lib and run ldconfig.</p>
+
+<p>Credit Mark Turner for the ldconfig tip.  Thanks man.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Mysql Backup Script]]></title>
+    <link href="http://randomutterings.github.io/blog/mysql-backup-script/"/>
+    <updated>2007-09-06T15:04:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/mysql-backup-script</id>
+    <content type="html"><![CDATA[<p>Need a way to backup all your mysql databases in seperate files without eating up your hard drive, then this is the script you need.</p>
+
+<p>Its a bash shell script that will export all your databases with mysqldump into seperate files named like 'database-date.sql'.  It will also delete your old backups so you don't fill up your hard drive.</p>
+
+<!-- more -->
+
+
+<p><div class='bogus-wrapper'><notextile><figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h1&gt;!/bin/bash&lt;/h1&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;DBHOST<span class="o">=</span><span class="s1">&#39;localhost&#39;</span>
+</span><span class='line'><span class="nv">DBUSER</span><span class="o">=</span><span class="s1">&#39;root&#39;</span>
+</span><span class='line'><span class="nv">DBPASSWD</span><span class="o">=</span><span class="s1">&#39;password&#39;</span>
+</span><span class='line'><span class="nv">LOCALDIR</span><span class="o">=</span>/path/to/your/backup/directory/&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h1&gt;Using the date <span class="k">function</span><span class="err">&#39;</span>s --date<span class="o">=</span><span class="s2">&quot;last week&quot;</span> to delete backups that are 7 days old&lt;/h1&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;OLDSUFFIX<span class="o">=</span>&lt;code&gt;date --date<span class="o">=</span><span class="s2">&quot;last week&quot;</span> +%Y%m%d&lt;/code&gt;
+</span><span class='line'><span class="nv">SUFFIX</span><span class="o">=</span>&lt;code&gt;date +%Y%m%d&lt;/code&gt;
+</span><span class='line'><span class="nv">DBS</span><span class="o">=</span>&lt;code&gt;mysql -u<span class="nv">$DBUSER</span> -p<span class="nv">$DBPASSWD</span> -h<span class="nv">$DBHOST</span> -e<span class="s2">&quot;show databases&quot;</span>&lt;/code&gt;
+</span><span class='line'><span class="nv">su_cmd</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+</span><span class='line'><span class="k">for </span>DATABASE in <span class="nv">$DBS</span>; <span class="k">do</span>
+</span><span class='line'><span class="k">  if</span> <span class="o">[</span> <span class="nv">$DATABASE</span> !<span class="o">=</span> <span class="s2">&quot;Database&quot;</span> <span class="o">]</span>; <span class="k">then</span>&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;OLDFILENAME<span class="o">=</span><span class="nv">$OLDSUFFIX</span>-<span class="nv">$DATABASE</span>.sql
+</span><span class='line'><span class="nv">FILENAME</span><span class="o">=</span><span class="nv">$SUFFIX</span>-<span class="nv">$DATABASE</span>.sql
+</span><span class='line'><span class="nv">su_cmd</span><span class="o">=</span><span class="s2">&quot;${su_cmd} rm -f $LOCALDIR$OLDFILENAME;&quot;</span>
+</span><span class='line'>mysqldump -u<span class="nv">$DBUSER</span> -p<span class="nv">$DBPASSWD</span> -h<span class="nv">$DBHOST</span> <span class="nv">$DATABASE</span> &amp;gt; <span class="nv">$LOCALDIR$FILENAME</span>
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;  <span class="k">fi</span>
+</span><span class='line'><span class="k">done</span>
+</span><span class='line'>su -c <span class="s2">&quot;${su_cmd}&quot;</span>
+</span><span class='line'><span class="nb">echo</span> <span class="s2">&quot;done&quot;</span>;
+</span></code></pre></td></tr></table></div></figure></notextile></div></p>
+]]></content>
+  </entry>
+  
+</feed>

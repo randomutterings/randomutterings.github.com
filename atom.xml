@@ -1,0 +1,1701 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Randomutterings]]></title>
+  <link href="http://randomutterings.github.io/atom.xml" rel="self"/>
+  <link href="http://randomutterings.github.io/"/>
+  <updated>2014-02-14T22:11:32-05:00</updated>
+  <id>http://randomutterings.github.io/</id>
+  <author>
+    <name><![CDATA[Chris Barnes]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Centralized multi-deployment approach with Capistrano]]></title>
+    <link href="http://randomutterings.github.io/blog/centralized-multi-deployment-approach-with-capistrano/"/>
+    <updated>2013-03-26T19:04:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/centralized-multi-deployment-approach-with-capistrano</id>
+    <content type="html"><![CDATA[<p>Capistrano is most often used for deploying a single Rails application but with a few libraries you can use it to deploy multiple applications or “services” in a service oriented architecture.  In this article I&#8217;ll walk through how to build this type of deployment application with Capistrano.</p>
+
+<!-- more -->
+
+
+<p>From the docs:</p>
+
+<p>Capistrano is a utility and framework for executing commands in parallel on multiple remote machines, via SSH. It uses a simple DSL (borrowed in part from Rake) that allows you to define tasks, which may be applied to machines in certain roles. It also supports tunneling connections via some gateway machine to allow operations to be performed behind VPN&#8217;s and firewalls.</p>
+
+<p>Normally with Capistrano your deployment code lives in the application repository.  With multiple applications or services, there would be serious disadvantages to this approach.  With a centralized deployment application, all of our deployment code is located in single repository.  We can easily refactor it, secure it, and it&#8217;s DRY.</p>
+
+<p>Since Capistrano executes remote commands via SSH, user restrictions inside the deployment application shouldn’t be necessary.  Individuals who have the permissions needed for a particular environment (production, qa, staging, etc) will be able to deploy to that environment.  Additionally, you can restrict access to the deployment application repository so only specific people/departments have access to update the deployment application code.</p>
+
+<p>Here&#8217;s an example of a directory structure for deploying 3 services in an SOA application.</p>
+
+<pre><code>├── config
+│   ├── deploy
+│   │   ├── soa_app
+│   │   │   ├── core_service
+│   │   │   │   ├── production.rb
+│   │   │   │   └── qa.rb
+│   │   │   │   └── staging.rb
+│   │   │   ├── user_service
+│   │   │   │   ├── production.rb
+│   │   │   │   └── qa.rb
+│   │   │   │   └── staging.rb
+│   │   │   └── billing_service
+│   │   │       ├── production.rb
+│   │   │       └── qa.rb
+│   │   │       └── staging.rb
+│   │   └── global.rb
+│   └── deploy.rb
+├── recipes
+├── Capfile
+└── Gemfile
+</code></pre>
+
+<p>You can create this structure manually or use a gem called CapHub which will generate the basic directory structure for you and install some needed gems.  It will also install a couple that are out of scope for this article so we&#8217;ll build the structure manually.</p>
+
+<p>Add the following to your Gemfile</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="n">source</span> <span class="s2">&quot;https://rubygems.org&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># Required: allows us to specify a separate configuration for each application/service</span>
+</span><span class='line'><span class="n">gem</span> <span class="s2">&quot;capistrano-multiconfig&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># Optional: confirm deployment tasks if the local deployment application is not up to date</span>
+</span><span class='line'><span class="n">gem</span> <span class="s2">&quot;capistrano-uptodate&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># Optional: use rvm to install and manage RVM and Rubies remotely</span>
+</span><span class='line'><span class="n">gem</span> <span class="s2">&quot;rvm-capistrano&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add the following to your Capfile</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="nb">require</span> <span class="s1">&#39;capistrano/multiconfig&#39;</span>
+</span><span class='line'><span class="nb">require</span> <span class="s1">&#39;capistrano/uptodate&#39;</span>
+</span><span class='line'><span class="nb">require</span> <span class="s1">&#39;rvm/capistrano&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># Optional: Use bundler for managing remote gems</span>
+</span><span class='line'><span class="nb">require</span> <span class="s1">&#39;bundler/capistrano&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># Load capistrano&#39;s deploy recipes</span>
+</span><span class='line'><span class="nb">load</span> <span class="s1">&#39;deploy&#39;</span>
+</span><span class='line'><span class="nb">load</span> <span class="s1">&#39;deploy/assets&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># Load all custom recipes</span>
+</span><span class='line'><span class="no">Dir</span><span class="o">[</span><span class="s1">&#39;recipes/**/*.rb&#39;</span><span class="o">].</span><span class="n">each</span> <span class="p">{</span> <span class="o">|</span><span class="n">recipe</span><span class="o">|</span> <span class="nb">load</span><span class="p">(</span><span class="n">recipe</span><span class="p">)</span> <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># Load common configuration</span>
+</span><span class='line'><span class="nb">load</span> <span class="s1">&#39;config/global&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The core functionality of our deployment application is in capistrano-multiconfig. It automatically builds Capistrano configurations from files located in config/deploy so creating config/deploy/soa_app/user_service/production.rb will make the corresponding configuration task available:</p>
+
+<pre><code>$ cap -T
+...
+cap soa_app:user_service:production     # Load soa_app:user_service:production configuration
+...
+</code></pre>
+
+<p>Let&#8217;s take a look at our common configuration.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="c1"># config/global.rb</span>
+</span><span class='line'><span class="c1"># Put configuration here that is shared between ALL applications to be deployed</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># some global defaults, yours may differ</span>
+</span><span class='line'><span class="n">set</span> <span class="ss">:rvm_ruby_string</span><span class="p">,</span> <span class="s1">&#39;1.9.3&#39;</span>
+</span><span class='line'><span class="n">set</span> <span class="ss">:scm</span><span class="p">,</span> <span class="ss">:git</span>
+</span><span class='line'><span class="n">set</span> <span class="ss">:scm_verbose</span><span class="p">,</span> <span class="kp">true</span>
+</span><span class='line'><span class="n">set</span> <span class="ss">:user</span><span class="p">,</span> <span class="s1">&#39;bob&#39;</span>
+</span><span class='line'><span class="n">ssh_options</span><span class="o">[</span><span class="ss">:keys</span><span class="o">]</span> <span class="o">=</span> <span class="o">[</span><span class="no">File</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="no">ENV</span><span class="o">[</span><span class="s2">&quot;HOME&quot;</span><span class="o">]</span><span class="p">,</span> <span class="s2">&quot;.ssh&quot;</span><span class="p">,</span> <span class="s2">&quot;id_rsa&quot;</span><span class="p">)</span><span class="o">]</span>
+</span><span class='line'><span class="n">set</span> <span class="ss">:git_enable_submodules</span><span class="p">,</span> <span class="mi">1</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># keeps a cached copy of the application repo on each environment for faster deployments</span>
+</span><span class='line'><span class="n">set</span> <span class="ss">:deploy_via</span><span class="p">,</span> <span class="ss">:remote_cache</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># set the application/service name and rails environment from the task naming convention</span>
+</span><span class='line'><span class="n">set</span><span class="p">(</span><span class="ss">:application</span><span class="p">)</span> <span class="p">{</span> <span class="n">config_name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">reverse</span><span class="o">[</span><span class="mi">1</span><span class="o">]</span> <span class="p">}</span>    <span class="c1"># core_service, user_service, billing_service</span>
+</span><span class='line'><span class="n">set</span><span class="p">(</span><span class="ss">:stage</span><span class="p">)</span> <span class="p">{</span> <span class="n">config_name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">last</span> <span class="p">}</span>                <span class="c1"># production, qa, staging</span>
+</span><span class='line'><span class="n">set</span><span class="p">(</span><span class="ss">:rails_env</span><span class="p">)</span> <span class="p">{</span> <span class="n">stage</span> <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># we&#39;re deploying our database and server config also</span>
+</span><span class='line'><span class="n">before</span> <span class="s1">&#39;deploy:finalize_update&#39;</span><span class="p">,</span> <span class="s1">&#39;deploy:symlink_database_config&#39;</span><span class="p">,</span> <span class="s1">&#39;deploy:symlink_apache_config&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">after</span><span class="p">(</span><span class="ss">:deploy</span><span class="p">)</span> <span class="k">do</span>
+</span><span class='line'>  <span class="n">deploy</span><span class="o">.</span><span class="n">migrate</span>        <span class="c1"># migrate the database</span>
+</span><span class='line'>  <span class="n">deploy</span><span class="o">.</span><span class="n">cleanup</span>        <span class="c1"># keep only the last 5 releases</span>
+</span><span class='line'><span class="k">end</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Notice we&#8217;re deploying server configuration as well as application code.  This is optional of course but I like the approach.  We&#8217;re managing server configuration for each service in a git submodule called &#8249;service-name&#8250;-config.  As configuration changes are introduced we track them in version control and we can test them against our staging environment.  Each release of the service knows the commit reference it should pull from its config repo.  Server configuration management (with rollback) is now part of our deployment strategy.  We get access management for sensitive server configs built in and we can perform automated testing for configuration changes.</p>
+
+<p>Anything that doesn&#8217;t apply globally can be specified in individual environment configurations.  Here&#8217;s an example production configuration for the user_service.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="c1"># config/deploy/soa_app/user_service/production.rb</span>
+</span><span class='line'><span class="n">set</span> <span class="ss">:domain</span><span class="p">,</span> <span class="s1">&#39;users.soa_app.com&#39;</span>
+</span><span class='line'><span class="n">role</span> <span class="ss">:web</span><span class="p">,</span> <span class="n">domain</span>
+</span><span class='line'><span class="n">role</span> <span class="ss">:app</span><span class="p">,</span> <span class="n">domain</span>
+</span><span class='line'><span class="n">role</span> <span class="ss">:db</span><span class="p">,</span>  <span class="n">domain</span><span class="p">,</span> <span class="ss">:primary</span> <span class="o">=&gt;</span> <span class="kp">true</span>
+</span><span class='line'><span class="n">set</span> <span class="ss">:repository</span><span class="p">,</span>  <span class="s2">&quot;git@github.com:bobs-code/user_service.git&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1"># ask for a branch or tag to deploy for the user_service</span>
+</span><span class='line'><span class="c1"># make sure to, git push origin --tags, first if you wish to deploy a tag</span>
+</span><span class='line'><span class="n">set</span> <span class="ss">:branch</span> <span class="k">do</span>
+</span><span class='line'>  <span class="n">branch</span> <span class="o">=</span> <span class="no">ENV</span><span class="o">[</span><span class="s1">&#39;BRANCH&#39;</span><span class="o">]</span> <span class="o">||</span> <span class="no">ENV</span><span class="o">[</span><span class="s1">&#39;TAG&#39;</span><span class="o">]</span>
+</span><span class='line'><span class="o">&amp;</span><span class="c1">#xa0;&amp;#xa0;if branch.nil?</span>
+</span><span class='line'>    <span class="ss">Capistrano</span><span class="p">:</span><span class="ss">:CLI</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">ask</span> <span class="s2">&quot;Branch or Tag to deploy for the user service: &quot;</span>
+</span><span class='line'>  <span class="k">else</span>
+</span><span class='line'>    <span class="n">branch</span>
+</span><span class='line'>  <span class="k">end</span>
+</span><span class='line'><span class="k">end</span>
+</span><span class='line'><span class="n">set</span> <span class="ss">:deploy_to</span><span class="p">,</span>   <span class="s2">&quot;/home/bob/</span><span class="si">#{</span><span class="n">application</span><span class="si">}</span><span class="s2">-</span><span class="si">#{</span><span class="n">stage</span><span class="si">}</span><span class="s2">&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>You can override Capistrano’s default deploy tasks or write your own from scratch.  In our example application we&#8217;re going to mostly depend on Capistrano&#8217;s deploy task.  We&#8217;ll override the restart task for our environment and add tasks to symlink our database and apache configurations.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'>  <span class="n">desc</span> <span class="s2">&quot;Symlink apache config&quot;</span>
+</span><span class='line'>  <span class="n">task</span> <span class="ss">:symlink_apache_config</span> <span class="k">do</span>
+</span><span class='line'>    <span class="n">run</span> <span class="s2">&quot;sudo ln -nfs </span><span class="si">#{</span><span class="n">release_path</span><span class="si">}</span><span class="s2">/config/submodule/apache/</span><span class="si">#{</span><span class="n">application</span><span class="si">}</span><span class="s2">-</span><span class="si">#{</span><span class="n">stage</span><span class="si">}</span><span class="s2"> /etc/apache2/sites-enabled/</span><span class="si">#{</span><span class="n">application</span><span class="si">}</span><span class="s2">-</span><span class="si">#{</span><span class="n">stage</span><span class="si">}</span><span class="s2">&quot;</span>
+</span><span class='line'>  <span class="k">end</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">desc</span> <span class="s2">&quot;Restart apache&quot;</span>
+</span><span class='line'>  <span class="n">task</span> <span class="ss">:restart</span> <span class="k">do</span>
+</span><span class='line'>    <span class="n">run</span> <span class="s2">&quot;sudo /etc/init.d/apache2 restart&quot;</span>
+</span><span class='line'>  <span class="k">end</span>
+</span><span class='line'><span class="k">end</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>To deploy our user_service we can execute</p>
+
+<pre><code>$ cap soa_app:user_service:production deploy
+</code></pre>
+
+<p>First time deployments to new servers will require some remote directory setup</p>
+
+<pre><code>$ cap soa_app:user_service:production deploy:setup
+</code></pre>
+
+<p>Deploying individual services one by one would be time consuming and error prone so we’ll need a way to deploy multiple services simultaneously.  There is a caveat here, since configurations are actually tasks to Capistrano, we must be careful not to run them in parallel or they&#8217;ll be merged.  To deploy our entire application you could script the deployment tasks in sequence but let&#8217;s create an additional recipe to handle this instead.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="n">namespace</span> <span class="ss">:deploy_all</span> <span class="k">do</span>
+</span><span class='line'> <span class="o">.</span><span class="n">.</span><span class="o">.</span>
+</span><span class='line'> <span class="n">task</span> <span class="ss">:staging</span> <span class="k">do</span>
+</span><span class='line'>   <span class="ss">Capistrano</span><span class="p">:</span><span class="ss">:CLI</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">say</span> <span class="s2">&quot;deploying core_service:staging&quot;</span>
+</span><span class='line'>   <span class="nb">system</span><span class="p">(</span><span class="s2">&quot;cap soa_app:core_service:staging deploy&quot;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>   <span class="ss">Capistrano</span><span class="p">:</span><span class="ss">:CLI</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">say</span> <span class="s2">&quot;deploying user_service:staging&quot;</span>
+</span><span class='line'>   <span class="nb">system</span><span class="p">(</span><span class="s2">&quot;cap soa_app:user_service:staging deploy&quot;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>   <span class="ss">Capistrano</span><span class="p">:</span><span class="ss">:CLI</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">say</span> <span class="s2">&quot;deploying billing_service:staging&quot;</span>
+</span><span class='line'>   <span class="nb">system</span><span class="p">(</span><span class="s2">&quot;cap soa_app:billing_service:staging deploy&quot;</span><span class="p">)</span>
+</span><span class='line'> <span class="k">end</span>
+</span><span class='line'> <span class="o">.</span><span class="n">.</span><span class="o">.</span>
+</span><span class='line'><span class="k">end</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We’ll need a (dummy) configuration environment for this so create an empty file config/deploy/soa_app.rb.</p>
+
+<p>Now we can deploy to staging by executing</p>
+
+<pre><code>$ cap soa_app deploy_all:staging
+</code></pre>
+
+<p>Once you get your deployment application functional, I recommend reading http://jondavidjohn.com/blog/2012/04/cleaning-up-capistrano-deployment-output.</p>
+
+<p>References<br/>
+capistrano<br/>
+capistrano-multiconfig<br/>
+capistrano-uptodate<br/>
+rvm-capistrano<br/>
+caphub</p>
+
+<p><a href="https://plus.google.com/100945199987484580489/posts/NYgqfrSG6DU">Comments on Google+</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Undo Git Commit]]></title>
+    <link href="http://randomutterings.github.io/blog/undo-git-commit/"/>
+    <updated>2010-04-18T19:02:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/undo-git-commit</id>
+    <content type="html"><![CDATA[<p>I just made a commit to a public project and pushed the changes up to github.  Then I realized that I left some confidential information in one of the files.  Searching online lead to a couple of different ways to fix this (git rebase, and git filter-branch), neither of which were working well for me.</p>
+
+<p>I finally figured out that doing the following would work as long as the confidential information were only included in the last commit.</p>
+
+<p>First update the file and remove the confidential info.</p>
+
+<pre><code>git add my-file-with-confidential-info
+git commit --amend
+</code></pre>
+
+<p>(this will add what&#8217;s in your current staging area to the last commit)</p>
+
+<pre><code>git push origin +master
+</code></pre>
+
+<p>(force push your changes to github)</p>
+
+<p>Hope this helps someone else.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Open Source Wedding]]></title>
+    <link href="http://randomutterings.github.io/blog/open-source-wedding/"/>
+    <updated>2010-03-16T18:58:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/open-source-wedding</id>
+    <content type="html"><![CDATA[<p><img src="http://farm9.staticflickr.com/8400/8705055977_76be3e4132.jpg" alt="wedding" /></p>
+
+<p>I&#8217;m getting Married this October and so I&#8217;ve created a wedding site for my personal use (<a href="http://www.fairbarneswedding.com">http://www.fairbarneswedding.com</a>). I thought, why should I use it once and leave it to rot in source control somewhere? So I&#8217;m releasing it under the GNU GPL.</p>
+
+<p>At the time of this writing the project has news articles, events calendar with rsvp, paypal integrated donation meter, wedding party members, wedding stories, and static pages. If you fork the project and make it better, send me a push request. You can find the source at <a href="http://github.com/randomutterings/wedding">http://github.com/randomutterings/wedding</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Changing images with JQuery and the fade effect]]></title>
+    <link href="http://randomutterings.github.io/blog/changing-images-with-jquery-and-the-fade-effect/"/>
+    <updated>2009-02-15T18:47:00-05:00</updated>
+    <id>http://randomutterings.github.io/blog/changing-images-with-jquery-and-the-fade-effect</id>
+    <content type="html"><![CDATA[<p><img src="http://farm9.staticflickr.com/8405/8706164820_edf4dc7753.jpg" alt="me and lydia" /></p>
+
+<p>Photo by <a href="http://www.flickr.com/photos/randomutterings/">me!</a></p>
+
+<p>It took me a bit of digging to figure out how to fade out a picture, change the src, then fade it back in.  I started out trying to use Scriptaculous but I got stuck trying to get the queue setup to wait until the image was faded out to change the src.  I ended up using jQuery which also gave me a bonus, the solution is unabtrusive.</p>
+
+<p>Here are the application.js and show.html.haml files from my project.</p>
+
+<!-- more -->
+
+
+
+
+<script src="http://gist.github.com/64723.js"></script>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Pool-party, Auto-scaling with EC2]]></title>
+    <link href="http://randomutterings.github.io/blog/pool-party/"/>
+    <updated>2008-05-31T18:43:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/pool-party</id>
+    <content type="html"><![CDATA[<p><img src="http://blog.randomutterings.com/images/articles/489184472_214de5bfee.jpg" alt="jump in" /></p>
+
+<p>Photo by <a href="%22http://www.flickr.com/photos/mancake/489184472/">hrlndspnks</a></p>
+
+<p>Having a great time at Railsconf08.  Meeting some great people and learning a lot.  I plan to post in more detail about a lot of this after the conference but I wanted to go ahead and mention one of the coolest presentations I&#8217;ve seen so far.</p>
+
+<p>Ari Lerner has created a ruby gem called pool-party.  It auto-scales your ec2 cluster based on criteria you set in the config file like average requests per second.  Set your minimum requests per second and if the average of all the servers on your cluster goes over the maximum, pool-party will launch another instance for you.  It scales down in the same way.  It doesn&#8217;t care what you&#8217;re using your cluster for and a its going to support plugins soon so you can add in your own hook like functionality.  Pool-party is using s3fuse to mount an s3 bucket on the instance  at startup.  Specify a bucket in pool-party and it gets mounted at /data on each instance.  This solves the data persistence issue with ec2.  You&#8217;re not required to use it though, just don&#8217;t specify a bucket in pool-party and nothing gets mounted.</p>
+
+<p>Ari open-sourced Pool Party as of 2 days ago.  Check it out at poolpartyrb.com.  If you want to contribute, its on github at <a href="http://github.com/auser/pool-party">http://github.com/auser/pool-party</a>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Installing git on linux]]></title>
+    <link href="http://randomutterings.github.io/blog/installing-git-on-linux/"/>
+    <updated>2008-04-24T18:41:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/installing-git-on-linux</id>
+    <content type="html"><![CDATA[<p>Trying to install git from source on our linux server (we&#8217;re running RHEL4 at work) and I was getting an error running make.</p>
+
+<pre><code>undefined reference to `libiconv'
+</code></pre>
+
+<p>Running make like this worked.</p>
+
+<pre><code>make install CFLAGS="-liconv"
+</code></pre>
+
+<p>But after the install was finished, running git barfed at me about loading a shared library libiconv.so.2.</p>
+
+<p>I had to edit /etc/ld.so.conf and add /usr/local/lib and run ldconfig.</p>
+
+<p>Credit Mark Turner for the ldconfig tip.  Thanks man.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Fixed Length Random numbers in Ruby]]></title>
+    <link href="http://randomutterings.github.io/blog/fixed-length-random-numbers-in-ruby/"/>
+    <updated>2008-01-09T18:35:00-05:00</updated>
+    <id>http://randomutterings.github.io/blog/fixed-length-random-numbers-in-ruby</id>
+    <content type="html"><![CDATA[<p>My latest project is almost complete and we&#8217;re setting up a demo site with lots of fake data already included so I used the faker gem to generate most of it.</p>
+
+<p>One issue I had that I couldn&#8217;t do with the faker gem out of the box is get a fixed length random number.  I need this for license numbers, credit card numbers, phone numbers and others.  The faker gem does offer a random phone number but the ones in my project don&#8217;t support extensions or punctuation so rather than generating the number then using string functions to strip out the stuff I didn&#8217;t want, I decided to find an easier way.</p>
+
+<!-- more -->
+
+
+<p>I started by Googling for it assuming that someone else had already figured it out and while I&#8217;m sure its been done a hundred times before, I couldn&#8217;t find it anywhere.  So after much thought and digging through the ruby docs, this is what I came up with.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="nb">rand</span><span class="p">(</span><span class="mi">9999999999</span><span class="p">)</span><span class="o">.</span><span class="n">to_s</span><span class="o">.</span><span class="n">center</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="nb">rand</span><span class="p">(</span><span class="mi">9</span><span class="p">)</span><span class="o">.</span><span class="n">to_s</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>rand(9999999999) will give me a number between 0 and 9999999999.  Convert it to a string and use the center method to make sure its at least 10 digits long and pad the rest with a random number from 0-9.  rand(9)</p>
+
+<p>If you need a number of say 7 digits in length, just change the first rand to rand(9999999) and change the center method length to 7 so it looks like this.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="nb">rand</span><span class="p">(</span><span class="mi">9999999</span><span class="p">)</span><span class="o">.</span><span class="n">to_s</span><span class="o">.</span><span class="n">center</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="nb">rand</span><span class="p">(</span><span class="mi">9</span><span class="p">)</span><span class="o">.</span><span class="n">to_s</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Hope this is helpful to someone.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Subversion script for Rails developers]]></title>
+    <link href="http://randomutterings.github.io/blog/subversion-script-for-rails-developers/"/>
+    <updated>2007-09-19T18:32:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/subversion-script-for-rails-developers</id>
+    <content type="html"><![CDATA[<p>I read somewhere that good developers use version control.  There&#8217;s a good article on <a href="http://wiki.rubyonrails.org/rails/pages/HowtoUseRailsWithSubversion">HowtoUseRailsWithSubversion</a>.</p>
+
+<p>So why should I repeat those steps for every new project I work on.</p>
+
+<!-- more -->
+
+
+<p>There is another <a href="http://www.railsonwave.com/railsonwave/2006/12/19/smart-subversion-script-for-rails-projects">article</a> which attempted to tackle this problem.  However, you still have to do the initial steps and then copy this script into your project directory and execute it.</p>
+
+<p>The following script takes it a bit farther.  You call it like this.</p>
+
+<pre><code>rails-svn app_dir repository username
+</code></pre>
+
+<p>So if I wanted to create a new rails project called toejam, I would execute:</p>
+
+<pre><code>rails-svn toejam svn://randomutterings.com/projects/toejam/trunk chris
+</code></pre>
+
+<p>Here&#8217;s what happens under the hood.</p>
+
+<ol>
+<li><p>After checking to make sure the directory doesn&#8217;t already exist, your rails app is created with the standard rails command.  (If the directory already exists, you will be asked if you want to continue.  Choosing yes will allow the script to continue but if this script has been run on the same app twice, all of the svn commits will be duplicated.)</p></li>
+<li><p>Your new app is imported to the subversion repository specified.  Authentication is done with the username provided.  You may be prompted for a password from your repository.</p></li>
+<li><p>The original app directory is deleted and a working copy is checked out from the repository into that directory.</p></li>
+<li><p>All the default rails log files are removed and subversion is instructed to ignore those files.  (Log files can get large and we definitely don&#8217;t need them in version control.)</p></li>
+<li><p>The database.yml is moved to database.example to serve as a template for anyone who checks out the code and any newly created database.yml files are ignored by subversion.  (Doing this will help if you have multiple developers working on the same project in different environments.  It also prevents you from overwriting the database.yml file on the production server, oops!</p></li>
+<li><p>Subversion is told to ignore everything in the tmp folder, the .htaccess files, and the dispatch.fcgi file.</p></li>
+</ol>
+
+
+<p>Without further ado, here&#8217;s the script.  Just copy it and save it somewhere in your path.  /usr/bin is a good choice.  Don&#8217;t forget to chmod 755 so you can execute it.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>  <span class="c">#!/bin/bash</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span> <span class="o">[</span> <span class="s2">&quot;$#&quot;</span> !<span class="o">=</span> <span class="s2">&quot;3&quot;</span> <span class="o">]</span>; <span class="k">then</span>
+</span><span class='line'><span class="k">    </span><span class="nb">echo</span> <span class="s2">&quot;Usage: rails-svn app_dir repository username&quot;</span>
+</span><span class='line'>    <span class="nb">exit </span>1
+</span><span class='line'>  <span class="k">fi</span>
+</span><span class='line'><span class="k">  </span>
+</span><span class='line'><span class="k">  </span><span class="nv">APPDIR</span><span class="o">=</span>./<span class="nv">$1</span>
+</span><span class='line'>  <span class="nv">SVN_TRUNK</span><span class="o">=</span><span class="nv">$2</span>
+</span><span class='line'>  <span class="nv">SVN_USER</span><span class="o">=</span><span class="nv">$3</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">function </span>check_if_exist <span class="o">()</span> <span class="o">{</span>
+</span><span class='line'>    <span class="k">if</span> <span class="o">[[</span> -e <span class="nv">$1</span> <span class="o">]]</span>; <span class="k">then</span>
+</span><span class='line'><span class="k">      </span><span class="nb">echo</span> <span class="s2">&quot;&quot;</span>
+</span><span class='line'>      <span class="nb">echo</span> <span class="s2">&quot;$1 already exists, overwrite? y or n&quot;</span>
+</span><span class='line'>      <span class="nb">echo</span> <span class="s2">&quot;&quot;</span>
+</span><span class='line'>      <span class="nb">read </span>OVERWRITE
+</span><span class='line'>      <span class="k">case</span> <span class="s2">&quot;$OVERWRITE&quot;</span> in
+</span><span class='line'>    y<span class="o">)</span>
+</span><span class='line'>      <span class="nb">echo</span> <span class="s2">&quot;Overwriting...&quot;</span>
+</span><span class='line'>        ;;
+</span><span class='line'>    *<span class="o">)</span>
+</span><span class='line'>      <span class="nb">echo</span> <span class="s2">&quot;Action canceled&quot;</span>
+</span><span class='line'>      <span class="nb">exit </span>1
+</span><span class='line'>        ;;
+</span><span class='line'>      <span class="k">esac</span>
+</span><span class='line'><span class="k">    fi</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>  check_if_exist <span class="k">${</span><span class="nv">APPDIR</span><span class="k">}</span>
+</span><span class='line'>  rails <span class="nv">$APPDIR</span>
+</span><span class='line'>  svn import <span class="nv">$APPDIR</span> <span class="nv">$SVN_TRUNK</span> -m <span class="s2">&quot;Import&quot;</span> --username <span class="nv">$SVN_USER</span>
+</span><span class='line'>  sudo rm -r <span class="nv">$APPDIR</span>
+</span><span class='line'>  svn checkout <span class="nv">$SVN_TRUNK</span> <span class="nv">$APPDIR</span>
+</span><span class='line'>  <span class="nb">cd</span> <span class="nv">$APPDIR</span>
+</span><span class='line'>
+</span><span class='line'>  svn remove log/*
+</span><span class='line'>  svn commit -m <span class="s2">&quot;removing log files&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;*.log&quot;</span> log/
+</span><span class='line'>  svn update log/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring all files in /log/ ending in .log&quot;</span>
+</span><span class='line'>  svn move config/database.yml config/database.example
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Moving database.yml to database.example to provide a template for anyone who checks out the code&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;database.yml&quot;</span> config/
+</span><span class='line'>  svn update config/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring database.yml&quot;</span>
+</span><span class='line'>  svn remove tmp/*
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;*&quot;</span> tmp/
+</span><span class='line'>  svn update tmp/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;ignore tmp/ content from now&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;.htaccess&quot;</span> public/
+</span><span class='line'>  svn update public/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring .htaccess&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;dispatch.fcgi&quot;</span> public/
+</span><span class='line'>  svn update public/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring dispatch.fcgi&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>I&#8217;m interested in converting this into a gem and possibly rewriting it in ruby.  If anyone has the skills and wants to contribute, leave a comment or <a href="mailto:randomutterings@gmail.com">email me</a>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Rapt error during peepcodes test first development tutorial]]></title>
+    <link href="http://randomutterings.github.io/blog/rapt-error-during-peepcodes-test-first-development-tutorial/"/>
+    <updated>2007-09-13T13:57:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/rapt-error-during-peepcodes-test-first-development-tutorial</id>
+    <content type="html"><![CDATA[<p>OK, let me start off by saying, I love the tutorials from peepcode, you guys are doing a great job so keep doing it.</p>
+
+<p>Alas, I got stuck while watching the <a href="http://peepcode.com/products/test-first-development">Test-first-development</a> tutorial.  They were using <a href="http://rapt.rubyforge.org/">Rapt</a> as an alternative to script/plugin and when I tried to run it I kept getting an error.</p>
+
+<!-- more -->
+
+
+<pre><code>Error: RaPT currently does not work outside of a Rails application directory.  Please change to the top level of a Rails application and try again.
+</code></pre>
+
+<p>This error is misleading but at least it was obviously misleading, after all I know I&#8217;m in my Rails application directory.</p>
+
+<p>After some googling, I found a post describing a work around for the problem, but it basically gave instructions on installing the plugin with script/plugin.  But the guys at peepcode had a reason for using rapt over script/plugin (its faster).  So I Google some more.  I finally find a <a href="http://rubyforge.org/tracker/index.php?func=detail&amp;aid=6611&amp;group_id=1889&amp;atid=7384">bug</a> on the Rapt <a href="http://rubyforge.org/projects/rapt/">Trac</a> posted in 2006 that explains that the user must first add repositories by executing the following.</p>
+
+<pre><code>rapt discover
+</code></pre>
+
+<p>If anyone knows how to have it default to yes without prompting you for every repository, please post a comment.</p>
+
+<p>Alternatively, you can add only the repositories you want to use by executing the following.</p>
+
+<pre><code>rapt source http://path-to-repository
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Mysql Backup Script]]></title>
+    <link href="http://randomutterings.github.io/blog/mysql-backup-script/"/>
+    <updated>2007-09-06T15:04:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/mysql-backup-script</id>
+    <content type="html"><![CDATA[<p>Need a way to backup all your mysql databases in seperate files without eating up your hard drive, then this is the script you need.</p>
+
+<p>Its a bash shell script that will export all your databases with mysqldump into seperate files named like &#8216;database-date.sql&#8217;.  It will also delete your old backups so you don&#8217;t fill up your hard drive.</p>
+
+<!-- more -->
+
+
+
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c">#!/bin/bash</span>
+</span><span class='line'>
+</span><span class='line'><span class="nv">DBHOST</span><span class="o">=</span><span class="s1">&#39;localhost&#39;</span>
+</span><span class='line'><span class="nv">DBUSER</span><span class="o">=</span><span class="s1">&#39;root&#39;</span>
+</span><span class='line'><span class="nv">DBPASSWD</span><span class="o">=</span><span class="s1">&#39;password&#39;</span>
+</span><span class='line'><span class="nv">LOCALDIR</span><span class="o">=</span>/path/to/your/backup/directory/
+</span><span class='line'>
+</span><span class='line'><span class="c"># Using the date function&#39;s --date=&quot;last week&quot; to delete backups that are 7 days old </span>
+</span><span class='line'><span class="nv">OLDSUFFIX</span><span class="o">=</span><span class="sb">`</span>date --date<span class="o">=</span><span class="s2">&quot;last week&quot;</span> +%Y%m%d<span class="sb">`</span>
+</span><span class='line'><span class="nv">SUFFIX</span><span class="o">=</span><span class="sb">`</span>date +%Y%m%d<span class="sb">`</span>
+</span><span class='line'><span class="nv">DBS</span><span class="o">=</span><span class="sb">`</span>mysql -u<span class="nv">$DBUSER</span> -p<span class="nv">$DBPASSWD</span> -h<span class="nv">$DBHOST</span> -e<span class="s2">&quot;show databases&quot;</span><span class="sb">`</span>
+</span><span class='line'><span class="nv">su_cmd</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+</span><span class='line'><span class="k">for </span>DATABASE in <span class="nv">$DBS</span>; <span class="k">do</span>
+</span><span class='line'><span class="k">  if</span> <span class="o">[</span> <span class="nv">$DATABASE</span> !<span class="o">=</span> <span class="s2">&quot;Database&quot;</span> <span class="o">]</span>; <span class="k">then</span>
+</span><span class='line'><span class="k">    </span><span class="nv">OLDFILENAME</span><span class="o">=</span><span class="nv">$OLDSUFFIX</span>-<span class="nv">$DATABASE</span>.sql
+</span><span class='line'>    <span class="nv">FILENAME</span><span class="o">=</span><span class="nv">$SUFFIX</span>-<span class="nv">$DATABASE</span>.sql
+</span><span class='line'>    <span class="nv">su_cmd</span><span class="o">=</span><span class="s2">&quot;${su_cmd} rm -f $LOCALDIR$OLDFILENAME;&quot;</span>
+</span><span class='line'>    mysqldump -u<span class="nv">$DBUSER</span> -p<span class="nv">$DBPASSWD</span> -h<span class="nv">$DBHOST</span> <span class="nv">$DATABASE</span> &gt; <span class="nv">$LOCALDIR$FILENAME</span>
+</span><span class='line'>  <span class="k">fi</span>
+</span><span class='line'><span class="k">done</span>
+</span><span class='line'>su -c <span class="s2">&quot;${su_cmd}&quot;</span>
+</span><span class='line'><span class="nb">echo</span> <span class="s2">&quot;done&quot;</span>;
+</span></code></pre></td></tr></table></div></figure>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Redundant Failover firewall with pf, pfsync and CARP on FreeBSD]]></title>
+    <link href="http://randomutterings.github.io/blog/redundant-failover-firewall/"/>
+    <updated>2007-06-15T16:35:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/redundant-failover-firewall</id>
+    <content type="html"><![CDATA[<p>This is a step by step tutorial that should take most of a day.  I&#8217;m posting this here mostly as a reminder so that I can come back and read it when I need to build another firewall but hopefully it will be helpful to someone else also.</p>
+
+<!-- more -->
+
+
+<h4>Install FreeBSD</h4>
+
+<p>Download the disc 1 and disc 2 from <a href="ftp://ftp.freebsd.org/pub/FreeBSD/releases/i386/ISO-IMAGES/6.2">ftp://ftp.freebsd.org/pub/FreeBSD/releases/i386/ISO-IMAGES/6.2</a></p>
+
+<p>Burn the iso images to cds and boot the target machine with disc 1.</p>
+
+<p>Start a Standard installation.</p>
+
+<p>Highlight any partitions and hit &#8220;d&#8221; to delete them, then hit &#8220;a&#8221; to use the entire disk, then hit &#8220;q&#8221; to continue.</p>
+
+<p>Choose Standard for no boot manager.</p>
+
+<p>Create partitions.  You can adjust the sizes of the partitions based on the size of your drive. The /usr/local and /usr/home partitions can go as low as 128MB since this won&#8217;t be a common-user system and there won&#8217;t be a lot of user-specific files or binaries&#8230;but the /usr partition should never go below 2,000MB since that&#8217;s where all of your kernel source code and the ports tree is located. Here&#8217;s a partition scheme if you have a 6GB drive:</p>
+
+<pre><code>486MB swap partition (or at least 2x your RAM)
+512MB file system mounted as /
+512MB file system mounted as /tmp
+1267MB file system mounted as /var
+3115MB file system mounted as /usr
+128MB file system mounted as /usr/local
+128MB file system mounted as /usr/home
+</code></pre>
+
+<p>Press q to continue.</p>
+
+<p>Highlight Kern-Developer and press space bar.</p>
+
+<p>When asked about installing the ports collection choose yes.</p>
+
+<p>Highlight exit and press enter.</p>
+
+<p>Choose CD/DVD as the install media.</p>
+
+<p>Last Chance, are you sure? Yes</p>
+
+<p>When you see Congradulations, hit ok.</p>
+
+<h4>FreeBSD Post-Install configuration</h4>
+
+<p>Would you like to configure any ethernet or SLIP/PPP network devices? Yes</p>
+
+<p>Highlight your device that is connected to the internet and press enter.</p>
+
+<p>Do you want to try IPv6? No</p>
+
+<p>Do you want to try DHCP? Yes</p>
+
+<p>Verify network info and update if necessary.</p>
+
+<p>Do you want this machine to function as a gateway? Yes</p>
+
+<p>Do you want to configure inetd and the network services that it provides? No</p>
+
+<p>Would you like to enable SSH login? Yes</p>
+
+<p>Do you want to have anonymous FTP access to this machine? No</p>
+
+<p>Do you want to configure this machine as an NFS Server: No</p>
+
+<p>Do you want to configure this machine as an NFS Client: No</p>
+
+<p>Would you like to customize your system console settings? No</p>
+
+<p>Would you like to set this machine&#8217;s time zone now? Yes</p>
+
+<p>Is your machine&#8217;s CMOS clock is set to UTC? No</p>
+
+<p>Select the appropriate time zone - by region, country, and then the applicable time zone.</p>
+
+<p>Would you like to enable Linux Binary compatibility? No</p>
+
+<p>Does your system have a PS/2, serial, or bus mouse? Yes (unless, of course, it doesn&#8217;t&#8230;)</p>
+
+<p>Would you like to browse the ports collection? Yes</p>
+
+<h4>Install cvsup and bash</h4>
+
+<p>cvsup will be used to keep your system up to date.</p>
+
+<p>Highlight net and press enter.</p>
+
+<p>Highlight cvsup-without-gui and press space bar.</p>
+
+<p>Tab to ok and press enter.</p>
+
+<p>bash is a shell that we will use instead of the default sh</p>
+
+<p>Highlight shells and press enter.</p>
+
+<p>Highlight bash-2 and press space bar.</p>
+
+<p>Tab to ok and press enter.</p>
+
+<p>Tab to Install and press enter
+Review your selections and press enter to install.</p>
+
+<p>Would you like to add any user accounts? Yes (we need at least one so we can dis-allow root ssh access and require you to login as an unprivilaged user and su to root)</p>
+
+<p>Highlight User and press enter.</p>
+
+<p>Type the username, password, full name, and make the member group 0. (this is important so that your new user will be in the &#8216;wheel&#8217; group and they will be able to su to root.  Also make the login shell /usr/local/bin/bash (I will create a user with the username admin so if you do the same you can follow the rest of this tutorial verbatim, otherwise just change admin to your username every time I use it later.</p>
+
+<p>Set the root password.</p>
+
+<p>Would you like to visit the general configuration menu for a chance to set any last options? Yes</p>
+
+<p>Go to network then ntupdate and choose a server near you.</p>
+
+<p>Highlight exit and press enter. (do this twice to get to the main menu)</p>
+
+<p>Tab over to Exit Install and hit enter.</p>
+
+<p>(System Reboots)</p>
+
+<h4>Make &#8220;bash&#8221; the default shell for &#8216;root&#8217; and perform an initial set up of root&#8217;s bash environment.</h4>
+
+<p>Log in as your non-privaleged user account. You should see a &#8216;bash-2.05b$&#8217; prompt&#8230;indicating that bash was successfully installed. After you log in, then type &#8216;su&#8217; to switch user to root. Enter the root password.</p>
+
+<p>Type vipw and press enter.</p>
+
+<p>Change the default shell from /bin/csh (at the end of the first line) to /usr/local/bin/bash.</p>
+
+<p>If you like, you can change root&#8217;s unoffical name from &#8216;Charlie &amp;&#8217; to &#8216;Super-User&#8217; or whatever you like.  When you get mail from root, it will be marked as being from the name that you enter here.</p>
+
+<p>Verify that your changes are successful. Press <Alt>-F2 to get another terminal, then log in as root. Verify that you&#8217;re presented with the &#8216;bash-2.05b#&#8217; prompt. If you are, then log out and go back to the 1st virtual terminal to continue working. If you don&#8217;t see the bash prompt, then you need to go back to the previous step and figure out what you did wrong.</p>
+
+<p>Create a file named .bashrc in /root that contains the following.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="nb">umask </span>077
+</span><span class='line'><span class="nv">PS1</span><span class="o">=</span><span class="s2">&quot;[\u@\h \W]\\$ &quot;</span>
+</span><span class='line'><span class="nb">alias </span><span class="nv">ls</span><span class="o">=</span><span class="s1">&#39;ls -alFG&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Also create a file named .bash_profile in /root that contains the following.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="nv">PATH</span><span class="o">=</span>/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin:/usr/local/sbin:<span class="nv">$HOME</span>/bin; <span class="nb">export </span>PATH
+</span><span class='line'><span class="nb">umask </span>077
+</span><span class='line'><span class="nv">PS1</span><span class="o">=</span><span class="s2">&quot;[\u@\h \W]\\$ &quot;</span>
+</span><span class='line'><span class="nb">alias </span><span class="nv">ls</span><span class="o">=</span><span class="s1">&#39;ls -alFG&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Change the permissions on both files.</p>
+
+<pre><code>chmod 600 .bashrc
+chmod 600 .bash_profile
+</code></pre>
+
+<p>Test your settings again at the 2nd virtual terminal.  Log in as root, verify you&#8217;re using the bash shell, your cursor line looks different (it has your userid and current working directory), and that you have colorized directory listings.  Close that session, return to the 1st virtual terminal, log out, and log back in and su to root.</p>
+
+<p>Copy the files to your non privilaged user change the ownership of the new copies.</p>
+
+<pre><code>cp /root/.bashrc /usr/home/admin/.bashrc
+cp /root/.bash_profile /usr/home/admin/.bash_profile
+chown admin /usr/home/admin/.bashrc
+chown admin /usr/home/admin/.bash_profile
+</code></pre>
+
+<h4>Redirect root&#8217;s email to your email account.</h4>
+
+<pre><code>vi /etc/aliases
+</code></pre>
+
+<p>Uncomment # root: me@my.domain and change me@mydomain to your email address.</p>
+
+<p>Save and exit.</p>
+
+<p>Update the email alias database.</p>
+
+<pre><code>newaliases
+</code></pre>
+
+<h4>Configure cvsup and update your source tree &amp; ports collection.</h4>
+
+<p>After you configure cvsup and update your source and ports collection, you will want to re-run cvsup every once in a while to ensure your sources are up to date,  then recompile your kernel &amp; system binaries to ensure you are using the latest versions with security patches applied.</p>
+
+<pre><code>cp /usr/share/examples/cvsup/stable-supfile /etc
+chmod 600 /etc/stable-supfile
+vi /etc/stable-supfile
+</code></pre>
+
+<p>Type &#8220;:set num&#8221; in vi to see line numbers</p>
+
+<p>Change line 68 to point to a CVS server near you. Here you&#8217;ll find a list of CVSup servers <a href="http://www.freebsd.org/doc/en_US.ISO8859-1/books/handbook/cvsup.html#CVSUP-MIRRORS">http://www.freebsd.org/doc/en_US.ISO8859-1/books/handbook/cvsup.html#CVSUP-MIRRORS</a>.  I ususlly go with cvsup2 or 3 because the main site reaches the maximum number of simultaneous users often.</p>
+
+<p>Add these lines at the bottom of the file:</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>ports-net <span class="nv">tag</span><span class="o">=</span>CHANGE_THIS.FreeBSD.org
+</span><span class='line'>ports-shells <span class="nv">tag</span><span class="o">=</span>CHANGE_THIS.FreeBSD.org
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Syncronize your source tree with the CVS server&#8230;should take 30-60 minutes</p>
+
+<pre><code>cvsup /etc/stable-supfile
+</code></pre>
+
+<p>Configure a custom kernel with support for ph, phsync, pflog, and carp</p>
+
+<pre><code>cd /usr/src/sys/i386/conf
+cp GENERIC FIREWALL
+vi FIREWALL
+</code></pre>
+
+<p>In line 2 of the file (part of the main comment block) change the word, GENERIC, to your hostname, FIREWALL.</p>
+
+<p>On line 19 of the file (still part of the main comment block), change the word, GENERIC, to your hostname, FIREWALL</p>
+
+<p>On lines 22-24, comment out the &#8220;cpu&#8221; lines so that only the one for your specific chip is left.</p>
+
+<p>On line 25, change the value of the ident parameter so that it&#8217;s your hostname, FIREWALL</p>
+
+<p>Add the following lines to the bottom of the file.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c"># pf support</span>
+</span><span class='line'>device pf
+</span><span class='line'>device pfsync
+</span><span class='line'>device pflog
+</span><span class='line'>device carp
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Recompile your kernel to the updated stable version.  (make buildworld will take about an hour and make buildkernel will take about 20 minutes)</p>
+
+<pre><code>[root@firewall /]# cd /usr/src
+[root@firewall src]# echo "KERNCONF=FIREWALL" &gt;&gt; /etc/make.conf
+[root@firewall src]# make buildworld
+[root@firewall src]# make buildkernel
+[root@firewall src]# make installkernel
+</code></pre>
+
+<h4>Configure the SSH daemon and your user&#8217;s DSA key files.</h4>
+
+<p>Modify the SSH daemon configuration file, /etc/ssh/sshd_config, so that it reads as follows.  I&#8217;m using port 8081 for ssh access instead of the usual port 21.  In the past I have had issues with hackers trying to use brute force tactics on my standard ports if they were open.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>Port 8081
+</span><span class='line'>Protocol 2
+</span><span class='line'><span class="c">#AddressFamily any</span>
+</span><span class='line'>ListenAddress 192.168.1.1 <span class="c"># Put your internal interface&#39;s address here</span>
+</span><span class='line'><span class="c">#ListenAddress :: </span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># HostKey for protocol version 1</span>
+</span><span class='line'><span class="c">#HostKey /etc/ssh/ssh_host_key</span>
+</span><span class='line'><span class="c"># HostKeys for protocol version 2</span>
+</span><span class='line'><span class="c">#HostKey /etc/ssh/ssh_host_dsa_key</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Lifetime and size of ephemeral version 1 server key</span>
+</span><span class='line'><span class="c">#KeyRegenerationInterval 1h</span>
+</span><span class='line'><span class="c">#ServerKeyBits 768</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Logging</span>
+</span><span class='line'><span class="c"># obsoletes QuietMode and FascistLogging</span>
+</span><span class='line'><span class="c">#SyslogFacility AUTH</span>
+</span><span class='line'>LogLevel VERBOSE
+</span><span class='line'>
+</span><span class='line'><span class="c"># Authentication:</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">#LoginGraceTime 2m</span>
+</span><span class='line'>PermitRootLogin no
+</span><span class='line'>StrictModes yes
+</span><span class='line'><span class="c">#MaxAuthTries 6</span>
+</span><span class='line'>
+</span><span class='line'>RSAAuthentication yes
+</span><span class='line'>PubkeyAuthentication yes
+</span><span class='line'>AuthorizedKeysFile .ssh/authorized_keys
+</span><span class='line'>
+</span><span class='line'><span class="c"># For this to work you will also need host keys in /etc/ssh/ssh_known_hosts</span>
+</span><span class='line'>RhostsRSAAuthentication no
+</span><span class='line'><span class="c"># similar for protocol version 2</span>
+</span><span class='line'>HostbasedAuthentication no
+</span><span class='line'><span class="c"># Change to yes if you don&#39;t trust ~/.ssh/known_hosts for</span>
+</span><span class='line'><span class="c"># RhostsRSAAuthentication and HostbasedAuthentication</span>
+</span><span class='line'>IgnoreUserKnownHosts yes
+</span><span class='line'><span class="c"># Don&#39;t read the user&#39;s ~/.rhosts and ~/.shosts files</span>
+</span><span class='line'>IgnoreRhosts yes
+</span><span class='line'>
+</span><span class='line'><span class="c"># Change to yes to enable built-in password authentication.</span>
+</span><span class='line'>PasswordAuthentication no
+</span><span class='line'>PermitEmptyPasswords no
+</span><span class='line'>
+</span><span class='line'><span class="c"># Change to no to disable PAM authentication</span>
+</span><span class='line'>ChallengeResponseAuthentication no
+</span><span class='line'>
+</span><span class='line'><span class="c"># Kerberos options</span>
+</span><span class='line'><span class="c">#KerberosAuthentication no</span>
+</span><span class='line'><span class="c">#KerberosOrLocalPasswd yes</span>
+</span><span class='line'><span class="c">#KerberosTicketCleanup yes</span>
+</span><span class='line'><span class="c">#KerberosGetAFSToken no</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># GSSAPI options</span>
+</span><span class='line'><span class="c">#GSSAPIAuthentication no</span>
+</span><span class='line'><span class="c">#GSSAPICleanupCredentials yes</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Set this to &#39;no&#39; to disable PAM authentication, account processing,</span>
+</span><span class='line'><span class="c"># and session processing. If this is enabled, PAM authentication will</span>
+</span><span class='line'><span class="c"># be allowed through the ChallengeResponseAuthentication and</span>
+</span><span class='line'><span class="c"># PasswordAuthentication. Depending on your PAM configuration,</span>
+</span><span class='line'><span class="c"># PAM authentication via ChallengeResponseAuthentication may bypass</span>
+</span><span class='line'><span class="c"># the setting of &quot;PermitRootLogin without-password&quot;.</span>
+</span><span class='line'><span class="c"># If you just want the PAM account and session checks to run without</span>
+</span><span class='line'><span class="c"># PAM authentication, then enable this but set PasswordAuthentication</span>
+</span><span class='line'><span class="c"># and ChallengeResponseAuthentication to &#39;no&#39;.</span>
+</span><span class='line'>UsePAM no
+</span><span class='line'>
+</span><span class='line'>AllowTcpForwarding no
+</span><span class='line'>GatewayPorts no
+</span><span class='line'>X11Forwarding no
+</span><span class='line'><span class="c">#X11DisplayOffset 10</span>
+</span><span class='line'><span class="c">#X11UseLocalhost yes</span>
+</span><span class='line'><span class="c">#PrintMotd yes</span>
+</span><span class='line'>PrintLastLog yes
+</span><span class='line'><span class="c">#TCPKeepAlive yes</span>
+</span><span class='line'><span class="c">#UseLogin no</span>
+</span><span class='line'><span class="c">#UsePrivilegeSeparation yes</span>
+</span><span class='line'><span class="c">#PermitUserEnvironment no</span>
+</span><span class='line'><span class="c">#Compression delayed</span>
+</span><span class='line'><span class="c">#ClientAliveInterval 0</span>
+</span><span class='line'><span class="c">#ClientAliveCountMax 3</span>
+</span><span class='line'><span class="c">#UseDNS yes</span>
+</span><span class='line'><span class="c">#PidFile /var/run/sshd.pid</span>
+</span><span class='line'><span class="c">#MaxStartups 10</span>
+</span><span class='line'><span class="c">#PermitTunnel no</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># no default banner path</span>
+</span><span class='line'><span class="c">#Banner /some/path</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># override default of no subsystems</span>
+</span><span class='line'>Subsystem sftp /usr/libexec/sftp-server
+</span><span class='line'>
+</span><span class='line'><span class="c"># Example of overriding settings on a per-user basis</span>
+</span><span class='line'><span class="c">#Match User anoncvs</span>
+</span><span class='line'><span class="c"># X11Forwarding no</span>
+</span><span class='line'><span class="c"># AllowTcpForwarding no</span>
+</span><span class='line'><span class="c"># ForceCommand cvs server</span>
+</span><span class='line'>AllowUsers admin <span class="c"># Substitute your non-privilaged user for admin</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Generate an SSH key (version 2) for your user, by performing the following steps:</p>
+
+<pre><code>[root@firewall /root]# su - admin          *** substitute your non-privileged userid for 'admin'
+[admin@firewall admin]$ ssh-keygen -d   *** then accept the default DSA key name &amp; enter a passphrase (twice)
+</code></pre>
+
+<p>Add the public copy of your user&#8217;s version 2 key to their own authorized_keys file by typing the following steps:</p>
+
+<pre><code>[admin@firewall admin]$ cd .ssh
+[admin@firewall .ssh]$ cat id_dsa.pub &gt; authorized_keys
+</code></pre>
+
+<p>Copy your user&#8217;s private &amp; public keys to other systems that you&#8217;ll be using to SSH to your new firewall from. By default, the private &amp; public key go into a user&#8217;s &#8216;.ssh&#8217; directory on those systems. Without the private key on those remote systems, your firewall will not accept connections from them. If you&#8217;re new to FreeBSD and need to know how to access the floppy drive, follow the following steps.</p>
+
+<pre><code>[root@firewall root]# mkdir /mnt/floppy                     # This will make an empty mount point to mount the floppy to
+[root@firewall root]# mount -t msdosfs /dev/fd0 /mnt/floppy # Insert a DOS-formatted floppy before you do this
+[root@firewall root]# cd /mnt/floppy
+[root@firewall floppy]# cp /home/admin/.ssh/id_dsa* .       # Copies all of your user's ssh key info to the floppy
+[root@firewall floppy]# ls                                  # List the contents of the floppy to verify the files are there
+[root@firewall floppy]# cd .. 
+[root@firewall mnt]# umount /mnt/floppy                     # Unmount the floppy
+</code></pre>
+
+<p>Now that you&#8217;ve copied your user&#8217;s private &amp; public keys to another system, remove them from your user&#8217;s .ssh directory on the firewall. This is only a precaution so that it can&#8217;t be stolen by a hacker and compromised.</p>
+
+<p>Open up your /etc/hosts.allow file, delete all of the lines, and ensure that it reads as follows.  Note that 192.168.1.0 is the address space of your internal network in this example.  If you&#8217;re using a different internal address space (e.g. 10.10.10.0), then make the appropriate modifications.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c"># hosts.allow access control file for &quot;tcp wrapped&quot; applications.</span>
+</span><span class='line'>ALL : localhost 127.0.0.1 : allow
+</span><span class='line'>sshd : 192.168.1.0/255.255.255.0 : allow
+</span><span class='line'>ALL : ALL : deny
+</span><span class='line'><span class="c"># If you want to allow a specific computer on the Internet to SSH into your</span>
+</span><span class='line'><span class="c"># system, replace the &#39;sshd&#39; line above with one like this...but subsitute</span>
+</span><span class='line'><span class="c"># the X.X.X.X and subnet mask to suit your needs (e.g. one computer, entire subnet</span>
+</span><span class='line'><span class="c"># etc.). Also, make sure you allow inbound SSH from that same host/subnet</span>
+</span><span class='line'><span class="c"># in your /etc/ipf.rules file.</span>
+</span><span class='line'><span class="c"># sshd : 192.168.1.0/255.255.255.0 X.X.X.X/255.255.255.255 : allow</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Install and configure AIDE (Advanced Intrusion Detection Environment)</h4>
+
+<pre><code>[root@firewall /root]# cd /usr/ports/security/aide
+[root@firewall aide]# make install clean
+[root@firewall aide]# cp /usr/local/etc/aide.conf.sample /var/db/aide/aide.conf
+[root@firewall aide]# cd /var/db/aide
+[root@firewall aide]# aide --init
+[root@firewall aide]# mv databases/aide.db.new databases/aide.db
+</code></pre>
+
+<p>Create a cron job to check the integrity of your system every Sunday at 4AM:</p>
+
+<pre><code>[root@firewall /root]# cd /etc
+[root@firewall /etc]# vi crontab
+</code></pre>
+
+<p>Add the following line to the file:</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>0   4   *   *   7    root   /usr/local/bin/aide --check
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Restrict crontab access/usage</h4>
+
+<p>Create the file /var/cron/allow and add the following lines to it. Be sure to substitute &#8216;newuser&#8217; for whatever your non-privileged user account is.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>root
+</span><span class='line'>newuser
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit /etc/crontab and comment out the &#8216;at&#8217; job that runs every 5 minutes.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>*/5 * * * * root /usr/libexec/atrun
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Chmod your /etc/crontab file so that it is only readable by root.</p>
+
+<pre><code>[root@firewall /etc]# chmod 600 /etc/crontab
+</code></pre>
+
+<h4>Edit your /etc/rc.conf to look like this</h4>
+
+<p>This is my rc.conf file.  Your network interfaces will be named differently if you have different cards (e.g. xl0 and xl1 are 3com network cards in my machine and rl0 is an integrated NE2000 network card)</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="nv">icmp_drop_redirects</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">ntpdate_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">ntpdate_flags</span><span class="o">=</span><span class="s2">&quot;north-america.pool.ntp.org&quot;</span>
+</span><span class='line'><span class="nv">sshd_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">usbd_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">syslogd_flags</span><span class="o">=</span><span class="s2">&quot;-ss&quot;</span>
+</span><span class='line'><span class="nv">sshd_flags</span><span class="o">=</span><span class="s2">&quot;-4&quot;</span>
+</span><span class='line'><span class="nv">pf_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">pf_rules</span><span class="o">=</span><span class="s2">&quot;/etc/pf.conf&quot;</span>
+</span><span class='line'><span class="nv">pf_flags</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+</span><span class='line'><span class="nv">pflog_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">pflog_logfile</span><span class="o">=</span><span class="s2">&quot;/var/log/pflog&quot;</span>
+</span><span class='line'><span class="nv">pflog_flags</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+</span><span class='line'><span class="nv">kern_securelevel_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">kern_securelevel</span><span class="o">=</span><span class="s2">&quot;2&quot;</span>
+</span><span class='line'><span class="nv">dhcpd_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">gateway_enable</span><span class="o">=</span><span class="s2">&quot;YES&quot;</span>
+</span><span class='line'><span class="nv">defaultrouter</span><span class="o">=</span><span class="s2">&quot;208.180.xxx.xxx&quot;</span>
+</span><span class='line'><span class="nv">hostname</span><span class="o">=</span><span class="s2">&quot;dell_firewall&quot;</span>
+</span><span class='line'><span class="nv">network_interfaces</span><span class="o">=</span><span class="s2">&quot;xl0 xl1 rl0 lo0 pfsync0&quot;</span>
+</span><span class='line'><span class="nv">cloned_interfaces</span><span class="o">=</span><span class="s2">&quot;carp0 carp1 carp2&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Loopback Interface</span>
+</span><span class='line'><span class="nv">ifconfig_lo0</span><span class="o">=</span><span class="s2">&quot;inet 127.0.0.1&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># External Public Interface (for the secondary firewall use a different public ip.)</span>
+</span><span class='line'><span class="nv">ifconfig_xl0</span><span class="o">=</span><span class="s2">&quot;208.180.xxx.xxx&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># External Public Carp Interface</span>
+</span><span class='line'><span class="nv">ifconfig_carp0</span><span class="o">=</span><span class="s2">&quot;208.180.xxx.xxx vhid 1 pass foo&quot;</span>
+</span><span class='line'><span class="nv">ifconfig_carp0_alias0</span><span class="o">=</span><span class="s2">&quot;208.180.xxx.xxx vhid 1 pass foo&quot;</span>
+</span><span class='line'><span class="nv">ifconfig_carp0_alias1</span><span class="o">=</span><span class="s2">&quot;208.180.xxx.xxx vhid 1 pass foo&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Internal Interface (for the secondary firewall change the ip address to 192.168.1.251)</span>
+</span><span class='line'><span class="nv">ifconfig_xl1</span><span class="o">=</span><span class="s2">&quot;192.168.1.250&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Internal Carp Interface</span>
+</span><span class='line'><span class="nv">ifconfig_carp1</span><span class="o">=</span><span class="s2">&quot;192.168.1.1 vhid 2 pass foo&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Heartbeat Interface (for the secondary firewall, change the ip address to 10.10.10.251)</span>
+</span><span class='line'><span class="nv">ifconfig_rl0</span><span class="o">=</span><span class="s2">&quot;10.10.10.250&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">#Heartbeat Carp Interface</span>
+</span><span class='line'><span class="nv">ifconfig_carp2</span><span class="o">=</span><span class="s2">&quot;10.10.10.1 vhid 3 pass foo&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># PFSync Interface</span>
+</span><span class='line'><span class="nv">ifconfig_pfsync0</span><span class="o">=</span><span class="s2">&quot;up syncif rl0&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Add the following lines to the bottom of /etc/sysctl.conf</h4>
+
+<p>Type ifconfig with no parameters to view your network configuration.  Each real interface should have a line that says status: active when the ethernet cable is plugged in.  If any of them do not, then preempt will not work.  Note that the changes we made to rc.conf do not show up because we have not rebooted yet.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>net.inet.tcp.blackhole<span class="o">=</span>2
+</span><span class='line'>net.inet.udp.blackhole<span class="o">=</span>1
+</span><span class='line'>
+</span><span class='line'><span class="c"># if one interface fails then all will fail over</span>
+</span><span class='line'>net.inet.carp.preempt<span class="o">=</span>1
+</span><span class='line'>
+</span><span class='line'>net.inet.tcp.sendspace<span class="o">=</span>65536
+</span><span class='line'>net.inet.tcp.recvspace<span class="o">=</span>65536
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Configure the main firewall /etc/pf.conf</h4>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="c"># Macro and lists</span>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="nv">lop_if</span>  <span class="o">=</span><span class="s2">&quot;lo0&quot;</span>
+</span><span class='line'><span class="nv">pfs_if</span>  <span class="o">=</span><span class="s2">&quot;dc0&quot;</span>
+</span><span class='line'><span class="nv">ext_if</span>  <span class="o">=</span><span class="s2">&quot;xl0&quot;</span>
+</span><span class='line'><span class="nv">int_if</span>  <span class="o">=</span><span class="s2">&quot;xl1&quot;</span>
+</span><span class='line'><span class="nv">ext_carp</span> <span class="o">=</span><span class="s2">&quot;carp0&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="nv">dns_srv</span>  <span class="o">=</span> <span class="s2">&quot;{ 208.180.xxx.xxx, 208.180.xxx.xxx }&quot;</span>
+</span><span class='line'><span class="nv">int_fw</span>   <span class="o">=</span> <span class="s2">&quot;{ 208.180.xxx.xxx 192.168.1.1 }&quot;</span>
+</span><span class='line'><span class="nv">chat_srv</span> <span class="o">=</span> <span class="s2">&quot;{ 192.168.1.119 }&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Allowed incoming ICMP types</span>
+</span><span class='line'><span class="nv">icmp_types</span> <span class="o">=</span> <span class="s2">&quot;{ echorep, echoreq, timex, paramprob, unreach code needfrag }&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Private networks (RFC 1918)</span>
+</span><span class='line'><span class="nv">priv_nets</span> <span class="o">=</span> <span class="s2">&quot;{ 127.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12, 10.0.0.0/8 }&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="nv">mail_ports</span>         <span class="o">=</span> <span class="s2">&quot;{ 25, 110 }&quot;</span>
+</span><span class='line'><span class="nv">web_ports</span>          <span class="o">=</span> <span class="s2">&quot;{ www, https }&quot;</span>
+</span><span class='line'><span class="nv">ftp_ports</span>          <span class="o">=</span> <span class="s2">&quot;{ 8084 9000 9001 }&quot;</span>
+</span><span class='line'><span class="nv">firewall_ssh_ports</span> <span class="o">=</span> <span class="s2">&quot;{ 8081 }&quot;</span>
+</span><span class='line'><span class="nv">web_ssh_ports</span>      <span class="o">=</span> <span class="s2">&quot;{ 8082 }&quot;</span>
+</span><span class='line'><span class="nv">chat_ports</span>         <span class="o">=</span> <span class="s2">&quot;{ 8080 }&quot;</span>
+</span><span class='line'><span class="nv">dns_ports</span>          <span class="o">=</span> <span class="s2">&quot;{ 53 }&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="c"># Options, scrub and NAT</span>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="nb">set </span>block-policy drop
+</span><span class='line'><span class="nb">set </span>skip on <span class="nv">$lop_if</span>
+</span><span class='line'>
+</span><span class='line'>scrub in
+</span><span class='line'>
+</span><span class='line'><span class="c"># NAT outgoing connections</span>
+</span><span class='line'>nat on <span class="nv">$ext_if</span> from <span class="nv">$int_if</span>:network to any -&gt; <span class="nv">$ext_if</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="c"># Redirection</span>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to <span class="nv">$ext_carp</span> port <span class="nv">$chat_ports</span> -&gt; <span class="nv">$chat_srv</span>
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to <span class="nv">$ext_carp</span> port <span class="nv">$ftp_ports</span> -&gt; 192.168.1.80
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to <span class="nv">$ext_carp</span> port <span class="nv">$mail_ports</span> -&gt; 192.168.1.80
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to <span class="nv">$ext_carp</span> port <span class="nv">$web_ssh_ports</span> -&gt; 192.168.1.80
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to 208.180.xxx.xxx port <span class="nv">$web_ports</span> -&gt; 192.168.1.80
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to 208.180.xxx.xxx port <span class="nv">$web_ports</span> -&gt; 192.168.1.81
+</span><span class='line'>rdr on <span class="nv">$ext_if</span> proto tcp from any to 208.180.xxx.xxx port <span class="nv">$web_ports</span> -&gt; 192.168.1.82
+</span><span class='line'>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'><span class="c"># Filtering Rules</span>
+</span><span class='line'><span class="c">################################################################################</span>
+</span><span class='line'>block log all
+</span><span class='line'>antispoof quick <span class="k">for</span> <span class="nv">$int_if</span>
+</span><span class='line'>
+</span><span class='line'>pass in quick on <span class="nv">$ext_if</span> inet proto tcp from 208.180.xxx.xxx to <span class="nv">$int_fw</span> port <span class="nv">$firewall_ssh_ports</span> keep state
+</span><span class='line'>
+</span><span class='line'>pass in quick on <span class="nv">$int_if</span> inet proto udp from any to any port 123 keep state
+</span><span class='line'>pass out quick on <span class="nv">$ext_if</span> inet proto udp from any to any port 123 keep state
+</span><span class='line'>
+</span><span class='line'>pass quick on <span class="nv">$pfs_if</span> proto pfsync
+</span><span class='line'>pass quick proto carp
+</span><span class='line'>
+</span><span class='line'>block in quick on <span class="nv">$ext_if</span> from <span class="nv">$priv_nets</span> to any
+</span><span class='line'>block out quick on <span class="nv">$ext_if</span> from any to <span class="nv">$priv_nets</span>
+</span><span class='line'>
+</span><span class='line'>pass in quick on <span class="nv">$ext_if</span> inet proto tcp from any to <span class="nv">$int_if</span>:network port <span class="nv">$mail_ports</span> <span class="se">\</span>
+</span><span class='line'>     synproxy state
+</span><span class='line'>pass out quick on <span class="nv">$int_if</span> inet proto tcp from any to <span class="nv">$int_if</span>:network port <span class="nv">$mail_ports</span> <span class="se">\</span>
+</span><span class='line'>     keep state
+</span><span class='line'>pass in quick on <span class="nv">$int_if</span> inet proto tcp from <span class="nv">$int_if</span>:network port <span class="nv">$mail_ports</span> to any <span class="se">\</span>
+</span><span class='line'>     keep state
+</span><span class='line'>pass out quick on <span class="nv">$ext_if</span> inet proto tcp from <span class="nv">$int_if</span>:network port <span class="nv">$mail_ports</span> to any <span class="se">\</span>
+</span><span class='line'>     modulate state
+</span><span class='line'>
+</span><span class='line'>pass in  quick on <span class="nv">$ext_if</span> inet proto tcp from any to <span class="nv">$int_if</span>:network port <span class="nv">$web_ports</span> <span class="se">\</span>
+</span><span class='line'>     synproxy state
+</span><span class='line'>pass out quick on <span class="nv">$int_if</span> inet proto tcp from any to <span class="nv">$int_if</span>:network port <span class="nv">$web_ports</span> <span class="se">\</span>
+</span><span class='line'>     keep state
+</span><span class='line'>
+</span><span class='line'>pass in quick on <span class="nv">$ext_if</span> inet proto tcp from any to <span class="nv">$chat_srv</span> port <span class="nv">$chat_ports</span> <span class="se">\</span>
+</span><span class='line'>     synproxy state
+</span><span class='line'>pass out quick on <span class="nv">$int_if</span> inet proto tcp from any to <span class="nv">$chat_srv</span> port <span class="nv">$chat_ports</span> <span class="se">\</span>
+</span><span class='line'>     keep state
+</span><span class='line'>
+</span><span class='line'>pass in  quick inet proto icmp all icmp-type <span class="nv">$icmp_types</span>
+</span><span class='line'>pass out quick inet proto icmp all
+</span><span class='line'>
+</span><span class='line'>pass in quick on <span class="nv">$int_if</span> inet proto <span class="o">{</span> tcp, udp <span class="o">}</span> from <span class="nv">$int_if</span>:network to <span class="nv">$dns_srv</span> port domain keep state
+</span><span class='line'>
+</span><span class='line'>pass out quick on <span class="nv">$ext_if</span> inet proto <span class="o">{</span> tcp, udp <span class="o">}</span> from <span class="o">{</span> <span class="nv">$ext_if</span> <span class="nv">$int_if</span>:network<span class="o">}</span> to <span class="nv">$dns_srv</span> port domain keep state
+</span><span class='line'>
+</span><span class='line'>pass in  quick on <span class="nv">$int_if</span> inet proto tcp from <span class="nv">$int_if</span>:network to any port <span class="nv">$web_ports</span>
+</span><span class='line'>pass out quick on <span class="nv">$ext_if</span> inet proto tcp from <span class="o">{</span> <span class="nv">$ext_if</span> <span class="nv">$int_if</span>:network <span class="o">}</span> to any port <span class="nv">$web_ports</span> <span class="se">\</span>
+</span><span class='line'>     modulate state
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Configure the system to mount partitions restrictive</h4>
+
+<p>Modify the /etc/fstab file with vi so that we can change how each partition is mounted&#8230;to ensure that hackers can do at little as possible if they (by chance alone) hack the box. Essentially, we&#8217;re restricting some of the partitions so that they are &#8216;nosuid&#8217;, &#8216;noexec&#8217;, and &#8216;ro&#8217;. The original /etc/fstab should look something like this. Yours might look a little different&#8230;the first column (device names) might be a little different, but that&#8217;s OK. The stuff we&#8217;ll be modifying is in the 4th column.</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c"># Device    Mountpoint  FStype  Options   Dump  Pass#</span>
+</span><span class='line'>/dev/ad0s1b none        swap    sw        0     0
+</span><span class='line'>/dev/ad0s1a /           ufs     rw        1     1
+</span><span class='line'>/dev/ad0s1d /tmp        ufs     rw        2     2
+</span><span class='line'>/dev/ad0s1f /usr        ufs     rw        2     2
+</span><span class='line'>/dev/ad0s1h /usr/home   ufs     rw        2     2
+</span><span class='line'>/dev/ad0s1g /usr/local  ufs     rw        2     2
+</span><span class='line'>/dev/ad0s1e /var        ufs     rw        2     2
+</span><span class='line'>/dev/acd0   /cdrom      cd9660  ro,noauto 0     0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>First, copy the original /etc/fstab file to /etc/fstab.original<br>
+Then, make another copy of the /etc/fstab file and call it /etc/fstab.restrictive<br>
+Then, modify the /etc/fstab.restrictive file so that it reads as follows:</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c"># Device    Mountpoint  FStype  Options                 Dump  Pass#</span>
+</span><span class='line'>/dev/ad0s1b none        swap    sw                      0     0
+</span><span class='line'>/dev/ad0s1a /           ufs     rw,nosuid               1     1
+</span><span class='line'>/dev/ad0s1d /tmp        ufs     rw,noexec,nosuid,nodev  2     2
+</span><span class='line'>/dev/ad0s1f /usr        ufs     ro                      2     2
+</span><span class='line'>/dev/ad0s1h /usr/home   ufs     rw,noexec,nosuid        2     2
+</span><span class='line'>/dev/ad0s1g /usr/local  ufs     ro,nosuid               2     2
+</span><span class='line'>/dev/ad0s1e /var        ufs     rw,noexec,nosuid        2     2
+</span><span class='line'>/dev/acd0   /cdrom      cd9660  ro,noauto               0     0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Next, copy your new /etc/fstab.restrictive file and over-write the original /etc/fstab&#8230;so that your &#8220;real&#8221; fstab file has the restrictive settings, and you have the two other config files available (the original and restrictive one).</p>
+
+<pre><code>[root@firewall etc]# cp /etc/fstab.restrictive /etc/fstab
+</code></pre>
+
+<p>This will make adding new software, etc. much more difficult since /usr and /usr/local are mounted read-only. This means that programs which try to install their user-land programs in /usr/local/bin will fail during their install programs. And cvsup&#8230;which will try to update the kernel&#8217;s source code in /usr/src and the ports in /usr/ports&#8230;well, they&#8217;re now read-only because they fall under /usr. So, mounting your partitions in a very restrictive way will limit what the hacker can do on your system, but it makes software installs and kernel upgrades more difficult (or impossible&#8230;if the partitions are still mounted in a restrictive way).</p>
+
+<p>Given that, if you want to add new software or upgrade the kernel &amp; ports tree source code, you&#8217;ll need to</p>
+
+<ol>
+<li>Change the partition&#8217;s mounting in /etc/fstab back to their original values by copying your /etc/fstab.original file to /etc/fstab.</li>
+<li>Bump the kernel security level back down to &#8220;1&#8221; by setting the kern_securelevel paramater in your /etc/rc.conf file, and then</li>
+<li>Reboot the machine (this will not cause downtime because the secondary firewall will take over while this machine is rebooting)</li>
+<li>Update your sources with cvsup, then make buildworld, make buildkernel, and make installworld</li>
+</ol>
+
+
+<p>Then when you&#8217;re done upgrading, recompiling, and installing, do the steps in reverse:</p>
+
+<ol>
+<li>Change the partition&#8217;s mounting in /etc/fstab to their restrictive values by copying your /etc/fstab.restrictive file to /etc/fstab.</li>
+<li>Bump the kernel security level back up to &#8220;2&#8221; by setting the kern_securelevel paramater in your /etc/rc.conf file, and then</li>
+<li>Reboot the machine</li>
+</ol>
+
+
+<p>This is the price you pay for a VERY, VERY secure machine. Reboot the machine so we can finish the job&#8230;</p>
+
+<pre><code>[root@firewall /etc]# shutdown -r now
+</code></pre>
+
+<p>If the system doesn&#8217;t reboot, it means that you probably made an error in the kernel configuration file&#8230;possibly setting the wrong type of CPU. DON&#8217;T PANIC. We can still boot the machine so that you can fix the error. To boot into the original version of the kernel, following the steps, below:</p>
+
+<p>Reboot the machine (power off, then on)
+When you reboot the machine and get to the bootloader screen, select option 6, &#8220;Escape to loader prompt&#8221;. This will give you an &#8220;OK&#8221; prompt at the bottom of the screen. Boot from your &#8220;old&#8221; kernel.</p>
+
+<pre><code>OK unload
+OK boot /boot/kernel.old/kernel
+</code></pre>
+
+<p>After the old kernel boots, you&#8217;ll want to copy the &#8220;old&#8221; kernel to a safe place before you recompile a new kernel. This is an important thing to do since &#8220;kernel.old&#8221; is overwritten when you install a new kernel. To do this, type the following commands:</p>
+
+<pre><code>[root@firewall /]# cp -R /boot/kernel.old /boot/kernel.good
+</code></pre>
+
+<p>If subsequent kernel compiles still don&#8217;t work, you can always manually boot off your good kernel from the &#8220;OK&#8221; prompt until you resolve the problem&#8230;just substitute &#8220;kernel.good&#8221; for &#8220;kernel.old&#8221; in the commands listed above.</p>
+
+<p>Now that you&#8217;ve saved a copy of your &#8220;good&#8221; kernel, modify your kernel configuration file and fix whatever was causing the problems, recompile &amp; install, and then reboot and continue with the next step.</p>
+
+<p>After the system comes back up, you&#8217;ll want to re-generate the AIDE database and replace the old one. Since you updated the kernal and all of the system binaries, the AIDE database signatures of those files is out of date. If you don&#8217;t update the AIDE database, AIDE will find thousands of &#8220;changes&#8221; to the system binaries when it runs for the first time at 4AM in the morning. To update the database so that it has signatures for the newest kernel &amp; system binaries, etc, just type the following commands:</p>
+
+<figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="o">[</span>root@firewall /<span class="o">]</span><span class="c"># cd /var/db/aide</span>
+</span><span class='line'><span class="o">[</span>root@firewall aide<span class="o">]</span><span class="c"># aide --init</span>
+</span><span class='line'><span class="o">[</span>root@firewall aide<span class="o">]</span><span class="c"># mv databases/aide.db.new databases/aide.db</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After you do this you should have a completely working firewall.</p>
+
+<h4>Resources</h4>
+
+<p><a href="http://www.countersiege.com/doc/pfsync-carp/#configuration">Failover Firewall HowTo</a><br/>
+<a href="http://www.schlacter.net/public/FreeBSD-STABLE_and_IPFILTER.html">How to Build a FreeBSD-STABLE Firewall with IPFILTER</a><br/>
+<a href="http://www.familywilson.ca/pf-carp-freebsd-redundant-firewall/">Redundant Failover Firewall with pf, pfsync and CARP under FreeBSD.</a></p>
+]]></content>
+  </entry>
+  
+</feed>

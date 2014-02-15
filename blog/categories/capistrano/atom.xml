@@ -1,0 +1,374 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Capistrano | Randomutterings]]></title>
+  <link href="http://randomutterings.github.io/blog/categories/capistrano/atom.xml" rel="self"/>
+  <link href="http://randomutterings.github.io/"/>
+  <updated>2014-02-14T22:11:32-05:00</updated>
+  <id>http://randomutterings.github.io/</id>
+  <author>
+    <name><![CDATA[Chris Barnes]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Centralized multi-deployment approach with Capistrano]]></title>
+    <link href="http://randomutterings.github.io/blog/centralized-multi-deployment-approach-with-capistrano/"/>
+    <updated>2013-03-26T19:04:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/centralized-multi-deployment-approach-with-capistrano</id>
+    <content type="html"><![CDATA[<p>Capistrano is most often used for deploying a single Rails application but with a few libraries you can use it to deploy multiple applications or “services” in a service oriented architecture.  In this article I'll walk through how to build this type of deployment application with Capistrano.</p>
+
+<!-- more -->
+
+
+<p>From the docs:</p>
+
+<p>Capistrano is a utility and framework for executing commands in parallel on multiple remote machines, via SSH. It uses a simple DSL (borrowed in part from Rake) that allows you to define tasks, which may be applied to machines in certain roles. It also supports tunneling connections via some gateway machine to allow operations to be performed behind VPN's and firewalls.</p>
+
+<p>Normally with Capistrano your deployment code lives in the application repository.  With multiple applications or services, there would be serious disadvantages to this approach.  With a centralized deployment application, all of our deployment code is located in single repository.  We can easily refactor it, secure it, and it's DRY.</p>
+
+<p>Since Capistrano executes remote commands via SSH, user restrictions inside the deployment application shouldn’t be necessary.  Individuals who have the permissions needed for a particular environment (production, qa, staging, etc) will be able to deploy to that environment.  Additionally, you can restrict access to the deployment application repository so only specific people/departments have access to update the deployment application code.</p>
+
+<p>Here's an example of a directory structure for deploying 3 services in an SOA application.</p>
+
+<pre><code>├── config
+│   ├── deploy
+│   │   ├── soa_app
+│   │   │   ├── core_service
+│   │   │   │   ├── production.rb
+│   │   │   │   └── qa.rb
+│   │   │   │   └── staging.rb
+│   │   │   ├── user_service
+│   │   │   │   ├── production.rb
+│   │   │   │   └── qa.rb
+│   │   │   │   └── staging.rb
+│   │   │   └── billing_service
+│   │   │       ├── production.rb
+│   │   │       └── qa.rb
+│   │   │       └── staging.rb
+│   │   └── global.rb
+│   └── deploy.rb
+├── recipes
+├── Capfile
+└── Gemfile
+</code></pre>
+
+<p>You can create this structure manually or use a gem called CapHub which will generate the basic directory structure for you and install some needed gems.  It will also install a couple that are out of scope for this article so we'll build the structure manually.</p>
+
+<p>Add the following to your Gemfile</p>
+
+<p><div class='bogus-wrapper'><notextile><figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="n">source</span> <span class="s2">&quot;https://rubygems.org&quot;</span><span class="o">&lt;</span><span class="sr">/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;h1&gt;Required: allows us to specify a separate configuration for each application/se</span><span class="n">rvice</span><span class="o">&lt;</span><span class="sr">/h1&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;p&gt;gem &quot;capistrano-multiconfig&quot;&lt;/</span><span class="nb">p</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="n">h1</span><span class="o">&gt;</span><span class="ss">Optional</span><span class="p">:</span> <span class="n">confirm</span> <span class="n">deployment</span> <span class="n">tasks</span> <span class="k">if</span> <span class="n">the</span> <span class="n">local</span> <span class="n">deployment</span> <span class="n">application</span> <span class="n">is</span> <span class="ow">not</span> <span class="n">up</span> <span class="n">to</span> <span class="n">date</span><span class="o">&lt;</span><span class="sr">/h1&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;p&gt;gem &quot;capistrano-uptodate&quot;&lt;/</span><span class="nb">p</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="n">h1</span><span class="o">&gt;</span><span class="ss">Optional</span><span class="p">:</span> <span class="n">use</span> <span class="n">rvm</span> <span class="n">to</span> <span class="n">install</span> <span class="ow">and</span> <span class="n">manage</span> <span class="no">RVM</span> <span class="ow">and</span> <span class="no">Rubies</span> <span class="n">remotely</span><span class="o">&lt;</span><span class="sr">/h1&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;p&gt;gem &quot;rvm-capistrano&quot;</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div></p>
+
+<p>Add the following to your Capfile</p>
+
+<p><div class='bogus-wrapper'><notextile><figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="nb">require</span> <span class="s1">&#39;capistrano/multiconfig&#39;</span>
+</span><span class='line'><span class="nb">require</span> <span class="s1">&#39;capistrano/uptodate&#39;</span>
+</span><span class='line'><span class="nb">require</span> <span class="s1">&#39;rvm/capistrano&#39;</span><span class="o">&lt;</span><span class="sr">/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;h1&gt;Optional: Use bundler for managing remote gems&lt;/</span><span class="n">h1</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="nb">p</span><span class="o">&gt;</span><span class="nb">require</span> <span class="s1">&#39;bundler/capistrano&#39;</span><span class="o">&lt;</span><span class="sr">/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;h1&gt;Load capistrano&#39;s deploy recipes&lt;/</span><span class="n">h1</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="nb">p</span><span class="o">&gt;</span><span class="nb">load</span> <span class="s1">&#39;deploy&#39;</span>
+</span><span class='line'><span class="nb">load</span> <span class="s1">&#39;deploy/assets&#39;</span><span class="o">&lt;</span><span class="sr">/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;h1&gt;Load all custom recipes&lt;/</span><span class="n">h1</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="nb">p</span><span class="o">&gt;</span><span class="no">Dir</span><span class="o">[</span><span class="s1">&#39;recipes/&lt;em&gt;*/&lt;/em&gt;.rb&#39;</span><span class="o">].</span><span class="n">each</span> <span class="p">{</span> <span class="o">|</span><span class="n">recipe</span><span class="o">|</span> <span class="nb">load</span><span class="p">(</span><span class="n">recipe</span><span class="p">)</span> <span class="p">}</span><span class="o">&lt;</span><span class="sr">/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;h1&gt;Load common configuration&lt;/</span><span class="n">h1</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="nb">p</span><span class="o">&gt;</span><span class="nb">load</span> <span class="s1">&#39;config/global&#39;</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div></p>
+
+<p>The core functionality of our deployment application is in capistrano-multiconfig. It automatically builds Capistrano configurations from files located in config/deploy so creating config/deploy/soa_app/user_service/production.rb will make the corresponding configuration task available:</p>
+
+<pre><code>$ cap -T
+...
+cap soa_app:user_service:production     # Load soa_app:user_service:production configuration
+...
+</code></pre>
+
+<p>Let's take a look at our common configuration.</p>
+
+<p><div class='bogus-wrapper'><notextile><figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="o">&lt;</span><span class="sr">/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;h1&gt;config/</span><span class="n">global</span><span class="o">.</span><span class="n">rb</span><span class="o">&lt;</span><span class="sr">/h1&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;h1&gt;Put configuration here that is shared between ALL applications to be deployed&lt;/</span><span class="n">h1</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="n">h1</span><span class="o">&gt;</span><span class="n">some</span> <span class="n">global</span> <span class="n">defaults</span><span class="p">,</span> <span class="n">yours</span> <span class="n">may</span> <span class="n">differ</span><span class="o">&lt;</span><span class="sr">/h1&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;p&gt;set :rvm_ruby_string, &#39;1.9.3&#39;</span>
+</span><span class='line'><span class="sr">set :scm, :git</span>
+</span><span class='line'><span class="sr">set :scm_verbose, true</span>
+</span><span class='line'><span class="sr">set :user, &#39;bob&#39;</span>
+</span><span class='line'><span class="sr">ssh_options[:keys] = [File.join(ENV[&quot;HOME&quot;], &quot;.ssh&quot;, &quot;id_rsa&quot;)]</span>
+</span><span class='line'><span class="sr">set :git_enable_submodules, 1&lt;/</span><span class="nb">p</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="n">h1</span><span class="o">&gt;</span><span class="n">keeps</span> <span class="n">a</span> <span class="n">cached</span> <span class="n">copy</span> <span class="n">of</span> <span class="n">the</span> <span class="n">application</span> <span class="n">repo</span> <span class="n">on</span> <span class="n">each</span> <span class="n">environment</span> <span class="k">for</span> <span class="n">faster</span> <span class="n">deployments</span><span class="o">&lt;</span><span class="sr">/h1&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;p&gt;set :deploy_via, :remote_cache&lt;/</span><span class="nb">p</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="n">h1</span><span class="o">&gt;</span><span class="n">set</span> <span class="n">the</span> <span class="n">application</span><span class="o">/</span><span class="n">service</span> <span class="nb">name</span> <span class="ow">and</span> <span class="n">rails</span> <span class="n">environment</span> <span class="n">from</span> <span class="n">the</span> <span class="n">task</span> <span class="n">naming</span> <span class="n">convention</span><span class="o">&lt;</span><span class="sr">/h1&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;p&gt;set(:application) { config_name.split(&#39;:&#39;).reverse[1] }    # core_service, user_service, billing_service</span>
+</span><span class='line'><span class="sr">set(:stage) { config_name.split(&#39;:&#39;).last }                # production, qa, staging</span>
+</span><span class='line'><span class="sr">set(:rails_env) { stage }&lt;/</span><span class="nb">p</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="n">h1</span><span class="o">&gt;</span><span class="n">we</span><span class="s1">&#39;re deploying our database and server config also&lt;/h1&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="s1">&lt;p&gt;before &#39;</span><span class="ss">deploy</span><span class="p">:</span><span class="n">finalize_update</span><span class="s1">&#39;, &#39;</span><span class="ss">deploy</span><span class="p">:</span><span class="n">symlink_database_config</span><span class="s1">&#39;, &#39;</span><span class="ss">deploy</span><span class="p">:</span><span class="n">symlink_apache_config</span><span class="err">&#39;</span><span class="o">&lt;</span><span class="sr">/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;p&gt;after(:deploy) do</span>
+</span><span class='line'><span class="sr">  deploy.migrate        # migrate the database</span>
+</span><span class='line'><span class="sr">  deploy.cleanup        # keep only the last 5 releases</span>
+</span><span class='line'><span class="sr">end</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div></p>
+
+<p>Notice we're deploying server configuration as well as application code.  This is optional of course but I like the approach.  We're managing server configuration for each service in a git submodule called &#8249;service-name&#8250;-config.  As configuration changes are introduced we track them in version control and we can test them against our staging environment.  Each release of the service knows the commit reference it should pull from its config repo.  Server configuration management (with rollback) is now part of our deployment strategy.  We get access management for sensitive server configs built in and we can perform automated testing for configuration changes.</p>
+
+<p>Anything that doesn't apply globally can be specified in individual environment configurations.  Here's an example production configuration for the user_service.</p>
+
+<p><div class='bogus-wrapper'><notextile><figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="o">&lt;</span><span class="sr">/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;h1&gt;config/</span><span class="n">deploy</span><span class="o">/</span><span class="n">soa_app</span><span class="o">/</span><span class="n">user_service</span><span class="o">/</span><span class="n">production</span><span class="o">.</span><span class="n">rb</span><span class="o">&lt;</span><span class="sr">/h1&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;p&gt;set :domain, &#39;users.soa_app.com&#39;</span>
+</span><span class='line'><span class="sr">role :web, domain</span>
+</span><span class='line'><span class="sr">role :app, domain</span>
+</span><span class='line'><span class="sr">role :db,  domain, :primary =&gt; true</span>
+</span><span class='line'><span class="sr">set :repository,  &quot;git@github.com:bobs-code/use</span><span class="n">r_service</span><span class="o">.</span><span class="n">git</span><span class="s2">&quot;&lt;/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="s2">&lt;h1&gt;ask for a branch or tag to deploy for the user_service&lt;/h1&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="s2">&lt;h1&gt;make sure to, git push origin --tags, first if you wish to deploy a tag&lt;/h1&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="s2">&lt;p&gt;set :branch do</span>
+</span><span class='line'><span class="s2">  branch = ENV[&#39;BRANCH&#39;] || ENV[&#39;TAG&#39;]</span>
+</span><span class='line'><span class="s2">&amp;#xa0;&amp;#xa0;if branch.nil?&lt;/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="s2">&lt;pre&gt;&lt;code&gt;Capistrano::CLI.ui.ask &quot;</span><span class="no">Branch</span> <span class="ow">or</span> <span class="no">Tag</span> <span class="n">to</span> <span class="n">deploy</span> <span class="k">for</span> <span class="n">the</span> <span class="n">user</span> <span class="ss">service</span><span class="p">:</span> <span class="s2">&quot;</span>
+</span><span class='line'><span class="s2">&lt;/code&gt;&lt;/pre&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="s2">&lt;p&gt;  else&lt;/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="s2">&lt;pre&gt;&lt;code&gt;branch</span>
+</span><span class='line'><span class="s2">&lt;/code&gt;&lt;/pre&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="s2">&lt;p&gt;  end</span>
+</span><span class='line'><span class="s2">end</span>
+</span><span class='line'><span class="s2">set :deploy_to,   &quot;</span><span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">bob</span><span class="o">/</span><span class="c1">#{application}-#{stage}&quot;</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div></p>
+
+<p>You can override Capistrano’s default deploy tasks or write your own from scratch.  In our example application we're going to mostly depend on Capistrano's deploy task.  We'll override the restart task for our environment and add tasks to symlink our database and apache configurations.</p>
+
+<p><div class='bogus-wrapper'><notextile><figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'>  <span class="n">desc</span> <span class="s2">&quot;Symlink apache config&quot;</span>
+</span><span class='line'>  <span class="n">task</span> <span class="ss">:symlink_apache_config</span> <span class="k">do</span><span class="o">&lt;</span><span class="sr">/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;pre&gt;&lt;code&gt;run &quot;sudo ln -nfs </span><span class="si">#{</span><span class="n">release_path</span><span class="si">}</span><span class="sr">/</span><span class="n">config</span><span class="o">/</span><span class="n">submodule</span><span class="o">/</span><span class="n">apache</span><span class="o">/</span><span class="c1">#{application}-#{stage} /etc/apache2/sites-enabled/#{application}-#{stage}&quot;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="sr">/code&gt;&lt;/</span><span class="n">pre</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="nb">p</span><span class="o">&gt;</span>  <span class="k">end</span><span class="o">&lt;</span><span class="sr">/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;p&gt;  desc &quot;Restart apache&quot;</span>
+</span><span class='line'><span class="sr">  task :restart do&lt;/</span><span class="nb">p</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="n">pre</span><span class="o">&gt;&lt;</span><span class="n">code</span><span class="o">&gt;</span><span class="n">run</span> <span class="s2">&quot;sudo /etc/init.d/apache2 restart&quot;</span>
+</span><span class='line'><span class="o">&lt;</span><span class="sr">/code&gt;&lt;/</span><span class="n">pre</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="nb">p</span><span class="o">&gt;</span>  <span class="k">end</span>
+</span><span class='line'><span class="k">end</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div></p>
+
+<p>To deploy our user_service we can execute</p>
+
+<pre><code>$ cap soa_app:user_service:production deploy
+</code></pre>
+
+<p>First time deployments to new servers will require some remote directory setup</p>
+
+<pre><code>$ cap soa_app:user_service:production deploy:setup
+</code></pre>
+
+<p>Deploying individual services one by one would be time consuming and error prone so we’ll need a way to deploy multiple services simultaneously.  There is a caveat here, since configurations are actually tasks to Capistrano, we must be careful not to run them in parallel or they'll be merged.  To deploy our entire application you could script the deployment tasks in sequence but let's create an additional recipe to handle this instead.</p>
+
+<p><div class='bogus-wrapper'><notextile><figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="n">namespace</span> <span class="ss">:deploy_all</span> <span class="k">do</span>
+</span><span class='line'> <span class="o">.</span><span class="n">.</span><span class="o">.</span>
+</span><span class='line'> <span class="n">task</span> <span class="ss">:staging</span> <span class="k">do</span>
+</span><span class='line'>   <span class="ss">Capistrano</span><span class="p">:</span><span class="ss">:CLI</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">say</span> <span class="s2">&quot;deploying core_service:staging&quot;</span>
+</span><span class='line'>   <span class="nb">system</span><span class="p">(</span><span class="s2">&quot;cap soa_app:core_service:staging deploy&quot;</span><span class="p">)</span><span class="o">&lt;</span><span class="sr">/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="sr">&lt;p&gt;   Capistrano::CLI.ui.say &quot;deploying user_service:staging&quot;</span>
+</span><span class='line'><span class="sr">   system(&quot;cap soa_app:user_service:staging deploy&quot;)&lt;/</span><span class="nb">p</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="nb">p</span><span class="o">&gt;</span>   <span class="ss">Capistrano</span><span class="p">:</span><span class="ss">:CLI</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">say</span> <span class="s2">&quot;deploying billing_service:staging&quot;</span>
+</span><span class='line'>   <span class="nb">system</span><span class="p">(</span><span class="s2">&quot;cap soa_app:billing_service:staging deploy&quot;</span><span class="p">)</span>
+</span><span class='line'> <span class="k">end</span>
+</span><span class='line'> <span class="o">.</span><span class="n">.</span><span class="o">.</span>
+</span><span class='line'><span class="k">end</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div></p>
+
+<p>We’ll need a (dummy) configuration environment for this so create an empty file config/deploy/soa_app.rb.</p>
+
+<p>Now we can deploy to staging by executing</p>
+
+<pre><code>$ cap soa_app deploy_all:staging
+</code></pre>
+
+<p>Once you get your deployment application functional, I recommend reading http://jondavidjohn.com/blog/2012/04/cleaning-up-capistrano-deployment-output.</p>
+
+<p>References<br/>
+capistrano<br/>
+capistrano-multiconfig<br/>
+capistrano-uptodate<br/>
+rvm-capistrano<br/>
+caphub</p>
+
+<p><a href="https://plus.google.com/100945199987484580489/posts/NYgqfrSG6DU">Comments on Google+</a></p>
+]]></content>
+  </entry>
+  
+</feed>
