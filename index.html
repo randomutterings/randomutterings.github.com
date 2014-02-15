@@ -1,1 +1,662 @@
-My Octopress Page is coming soon &hellip;
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Randomutterings</title>
+  <meta name="author" content="Chris Barnes">
+
+  
+  <meta name="description" content="Capistrano is most often used for deploying a single Rails application but with a few libraries you can use it to deploy multiple applications or “ &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://randomutterings.github.io">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Randomutterings" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="./javascripts/lib/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href='https://fonts.googleapis.com/css?family=Prosto+One' rel='stylesheet' type='text/css'>
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-2807156-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/"><img src="/images/logo.png" alt="Randomutterings" id="logo"></a></h1>
+  
+    <h2>about web development and such</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:randomutterings.github.io" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://www.linkedin.com/in/randomutterings/">Linkedin</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div class="blog-index">
+  
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/centralized-multi-deployment-approach-with-capistrano/">Centralized Multi-deployment Approach With Capistrano</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-03-26T19:04:00-04:00" pubdate data-updated="true">Mar 26<span>th</span>, 2013</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Capistrano is most often used for deploying a single Rails application but with a few libraries you can use it to deploy multiple applications or “services” in a service oriented architecture.  In this article I&#8217;ll walk through how to build this type of deployment application with Capistrano.</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/centralized-multi-deployment-approach-with-capistrano/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/undo-git-commit/">Undo Git Commit</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2010-04-18T19:02:00-04:00" pubdate data-updated="true">Apr 18<span>th</span>, 2010</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>I just made a commit to a public project and pushed the changes up to github.  Then I realized that I left some confidential information in one of the files.  Searching online lead to a couple of different ways to fix this (git rebase, and git filter-branch), neither of which were working well for me.</p>
+
+<p>I finally figured out that doing the following would work as long as the confidential information were only included in the last commit.</p>
+
+<p>First update the file and remove the confidential info.</p>
+
+<pre><code>git add my-file-with-confidential-info
+git commit --amend
+</code></pre>
+
+<p>(this will add what&#8217;s in your current staging area to the last commit)</p>
+
+<pre><code>git push origin +master
+</code></pre>
+
+<p>(force push your changes to github)</p>
+
+<p>Hope this helps someone else.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/open-source-wedding/">Open Source Wedding</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2010-03-16T18:58:00-04:00" pubdate data-updated="true">Mar 16<span>th</span>, 2010</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="http://farm9.staticflickr.com/8400/8705055977_76be3e4132.jpg" alt="wedding" /></p>
+
+<p>I&#8217;m getting Married this October and so I&#8217;ve created a wedding site for my personal use (<a href="http://www.fairbarneswedding.com">http://www.fairbarneswedding.com</a>). I thought, why should I use it once and leave it to rot in source control somewhere? So I&#8217;m releasing it under the GNU GPL.</p>
+
+<p>At the time of this writing the project has news articles, events calendar with rsvp, paypal integrated donation meter, wedding party members, wedding stories, and static pages. If you fork the project and make it better, send me a push request. You can find the source at <a href="http://github.com/randomutterings/wedding">http://github.com/randomutterings/wedding</a></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/changing-images-with-jquery-and-the-fade-effect/">Changing Images With JQuery and the Fade Effect</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2009-02-15T18:47:00-05:00" pubdate data-updated="true">Feb 15<span>th</span>, 2009</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="http://farm9.staticflickr.com/8405/8706164820_edf4dc7753.jpg" alt="me and lydia" /></p>
+
+<p>Photo by <a href="http://www.flickr.com/photos/randomutterings/">me!</a></p>
+
+<p>It took me a bit of digging to figure out how to fade out a picture, change the src, then fade it back in.  I started out trying to use Scriptaculous but I got stuck trying to get the queue setup to wait until the image was faded out to change the src.  I ended up using jQuery which also gave me a bonus, the solution is unabtrusive.</p>
+
+<p>Here are the application.js and show.html.haml files from my project.</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/changing-images-with-jquery-and-the-fade-effect/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/pool-party/">Pool-party, Auto-scaling With EC2</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2008-05-31T18:43:00-04:00" pubdate data-updated="true">May 31<span>st</span>, 2008</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="http://blog.randomutterings.com/images/articles/489184472_214de5bfee.jpg" alt="jump in" /></p>
+
+<p>Photo by <a href="%22http://www.flickr.com/photos/mancake/489184472/">hrlndspnks</a></p>
+
+<p>Having a great time at Railsconf08.  Meeting some great people and learning a lot.  I plan to post in more detail about a lot of this after the conference but I wanted to go ahead and mention one of the coolest presentations I&#8217;ve seen so far.</p>
+
+<p>Ari Lerner has created a ruby gem called pool-party.  It auto-scales your ec2 cluster based on criteria you set in the config file like average requests per second.  Set your minimum requests per second and if the average of all the servers on your cluster goes over the maximum, pool-party will launch another instance for you.  It scales down in the same way.  It doesn&#8217;t care what you&#8217;re using your cluster for and a its going to support plugins soon so you can add in your own hook like functionality.  Pool-party is using s3fuse to mount an s3 bucket on the instance  at startup.  Specify a bucket in pool-party and it gets mounted at /data on each instance.  This solves the data persistence issue with ec2.  You&#8217;re not required to use it though, just don&#8217;t specify a bucket in pool-party and nothing gets mounted.</p>
+
+<p>Ari open-sourced Pool Party as of 2 days ago.  Check it out at poolpartyrb.com.  If you want to contribute, its on github at <a href="http://github.com/auser/pool-party">http://github.com/auser/pool-party</a>.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/installing-git-on-linux/">Installing Git on Linux</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2008-04-24T18:41:00-04:00" pubdate data-updated="true">Apr 24<span>th</span>, 2008</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Trying to install git from source on our linux server (we&#8217;re running RHEL4 at work) and I was getting an error running make.</p>
+
+<pre><code>undefined reference to `libiconv'
+</code></pre>
+
+<p>Running make like this worked.</p>
+
+<pre><code>make install CFLAGS="-liconv"
+</code></pre>
+
+<p>But after the install was finished, running git barfed at me about loading a shared library libiconv.so.2.</p>
+
+<p>I had to edit /etc/ld.so.conf and add /usr/local/lib and run ldconfig.</p>
+
+<p>Credit Mark Turner for the ldconfig tip.  Thanks man.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/fixed-length-random-numbers-in-ruby/">Fixed Length Random Numbers in Ruby</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2008-01-09T18:35:00-05:00" pubdate data-updated="true">Jan 9<span>th</span>, 2008</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>My latest project is almost complete and we&#8217;re setting up a demo site with lots of fake data already included so I used the faker gem to generate most of it.</p>
+
+<p>One issue I had that I couldn&#8217;t do with the faker gem out of the box is get a fixed length random number.  I need this for license numbers, credit card numbers, phone numbers and others.  The faker gem does offer a random phone number but the ones in my project don&#8217;t support extensions or punctuation so rather than generating the number then using string functions to strip out the stuff I didn&#8217;t want, I decided to find an easier way.</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/fixed-length-random-numbers-in-ruby/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/subversion-script-for-rails-developers/">Subversion Script for Rails Developers</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2007-09-19T18:32:00-04:00" pubdate data-updated="true">Sep 19<span>th</span>, 2007</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>I read somewhere that good developers use version control.  There&#8217;s a good article on <a href="http://wiki.rubyonrails.org/rails/pages/HowtoUseRailsWithSubversion">HowtoUseRailsWithSubversion</a>.</p>
+
+<p>So why should I repeat those steps for every new project I work on.</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/subversion-script-for-rails-developers/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/rapt-error-during-peepcodes-test-first-development-tutorial/">Rapt Error During Peepcodes Test First Development Tutorial</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2007-09-13T13:57:00-04:00" pubdate data-updated="true">Sep 13<span>th</span>, 2007</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>OK, let me start off by saying, I love the tutorials from peepcode, you guys are doing a great job so keep doing it.</p>
+
+<p>Alas, I got stuck while watching the <a href="http://peepcode.com/products/test-first-development">Test-first-development</a> tutorial.  They were using <a href="http://rapt.rubyforge.org/">Rapt</a> as an alternative to script/plugin and when I tried to run it I kept getting an error.</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/rapt-error-during-peepcodes-test-first-development-tutorial/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/mysql-backup-script/">Mysql Backup Script</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2007-09-06T15:04:00-04:00" pubdate data-updated="true">Sep 6<span>th</span>, 2007</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Need a way to backup all your mysql databases in seperate files without eating up your hard drive, then this is the script you need.</p>
+
+<p>Its a bash shell script that will export all your databases with mysqldump into seperate files named like &#8216;database-date.sql&#8217;.  It will also delete your old backups so you don&#8217;t fill up your hard drive.</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/mysql-backup-script/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  <div class="pagination">
+    
+      <a class="prev" href="/blog/page/2/">&larr; Older</a>
+    
+    <a href="/blog/archives">Blog Archives</a>
+    
+  </div>
+</div>
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/centralized-multi-deployment-approach-with-capistrano/">Centralized multi-deployment approach with Capistrano</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/undo-git-commit/">Undo Git Commit</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/open-source-wedding/">Open Source Wedding</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/changing-images-with-jquery-and-the-fade-effect/">Changing images with JQuery and the fade effect</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/pool-party/">Pool-party, Auto-scaling with EC2</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating&#8230;</li>
+  </ul>
+  
+  <a href="https://github.com/randomutterings">@randomutterings</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'randomutterings',
+            count: 2,
+            skip_forks: false,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+
+<section class="googleplus">
+  <h1>
+    <a href="https://plus.google.com/100945199987484580489?rel=author">
+      <img src="http://www.google.com/images/icons/ui/gprofile_button-32.png" width="32" height="32">
+      Google+
+    </a>
+  </h1>
+</section>
+<a href="https://plus.google.com/100945199987484580489?rel=author">
+  <img src="https://www.google.com/s2/photos/profile/100945199987484580489" style="width:70%;" alt="google+ photo">
+</a>
+
+
+
+  
+</aside>
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Written by Chris Barnes -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id; js.async = true;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

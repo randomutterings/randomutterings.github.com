@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Rails | Randomutterings]]></title>
+  <link href="http://randomutterings.github.io/blog/categories/rails/atom.xml" rel="self"/>
+  <link href="http://randomutterings.github.io/"/>
+  <updated>2014-02-14T22:11:32-05:00</updated>
+  <id>http://randomutterings.github.io/</id>
+  <author>
+    <name><![CDATA[Chris Barnes]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Open Source Wedding]]></title>
+    <link href="http://randomutterings.github.io/blog/open-source-wedding/"/>
+    <updated>2010-03-16T18:58:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/open-source-wedding</id>
+    <content type="html"><![CDATA[<p><img src="http://farm9.staticflickr.com/8400/8705055977_76be3e4132.jpg" alt="wedding" /></p>
+
+<p>I'm getting Married this October and so I've created a wedding site for my personal use (<a href="http://www.fairbarneswedding.com">http://www.fairbarneswedding.com</a>). I thought, why should I use it once and leave it to rot in source control somewhere? So I'm releasing it under the GNU GPL.</p>
+
+<p>At the time of this writing the project has news articles, events calendar with rsvp, paypal integrated donation meter, wedding party members, wedding stories, and static pages. If you fork the project and make it better, send me a push request. You can find the source at <a href="http://github.com/randomutterings/wedding">http://github.com/randomutterings/wedding</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Pool-party, Auto-scaling with EC2]]></title>
+    <link href="http://randomutterings.github.io/blog/pool-party/"/>
+    <updated>2008-05-31T18:43:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/pool-party</id>
+    <content type="html"><![CDATA[<p><img src="http://blog.randomutterings.com/images/articles/489184472_214de5bfee.jpg" alt="jump in" /></p>
+
+<p>Photo by <a href="%22http://www.flickr.com/photos/mancake/489184472/">hrlndspnks</a></p>
+
+<p>Having a great time at Railsconf08.  Meeting some great people and learning a lot.  I plan to post in more detail about a lot of this after the conference but I wanted to go ahead and mention one of the coolest presentations I've seen so far.</p>
+
+<p>Ari Lerner has created a ruby gem called pool-party.  It auto-scales your ec2 cluster based on criteria you set in the config file like average requests per second.  Set your minimum requests per second and if the average of all the servers on your cluster goes over the maximum, pool-party will launch another instance for you.  It scales down in the same way.  It doesn't care what you're using your cluster for and a its going to support plugins soon so you can add in your own hook like functionality.  Pool-party is using s3fuse to mount an s3 bucket on the instance  at startup.  Specify a bucket in pool-party and it gets mounted at /data on each instance.  This solves the data persistence issue with ec2.  You're not required to use it though, just don't specify a bucket in pool-party and nothing gets mounted.</p>
+
+<p>Ari open-sourced Pool Party as of 2 days ago.  Check it out at poolpartyrb.com.  If you want to contribute, its on github at <a href="http://github.com/auser/pool-party">http://github.com/auser/pool-party</a>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Fixed Length Random numbers in Ruby]]></title>
+    <link href="http://randomutterings.github.io/blog/fixed-length-random-numbers-in-ruby/"/>
+    <updated>2008-01-09T18:35:00-05:00</updated>
+    <id>http://randomutterings.github.io/blog/fixed-length-random-numbers-in-ruby</id>
+    <content type="html"><![CDATA[<p>My latest project is almost complete and we're setting up a demo site with lots of fake data already included so I used the faker gem to generate most of it.</p>
+
+<p>One issue I had that I couldn't do with the faker gem out of the box is get a fixed length random number.  I need this for license numbers, credit card numbers, phone numbers and others.  The faker gem does offer a random phone number but the ones in my project don't support extensions or punctuation so rather than generating the number then using string functions to strip out the stuff I didn't want, I decided to find an easier way.</p>
+
+<!-- more -->
+
+
+<p>I started by Googling for it assuming that someone else had already figured it out and while I'm sure its been done a hundred times before, I couldn't find it anywhere.  So after much thought and digging through the ruby docs, this is what I came up with.</p>
+
+<p><div class='bogus-wrapper'><notextile><figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="nb">rand</span><span class="p">(</span><span class="mi">9999999999</span><span class="p">)</span><span class="o">.</span><span class="n">to_s</span><span class="o">.</span><span class="n">center</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="nb">rand</span><span class="p">(</span><span class="mi">9</span><span class="p">)</span><span class="o">.</span><span class="n">to_s</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div></p>
+
+<p>rand(9999999999) will give me a number between 0 and 9999999999.  Convert it to a string and use the center method to make sure its at least 10 digits long and pad the rest with a random number from 0-9.  rand(9)</p>
+
+<p>If you need a number of say 7 digits in length, just change the first rand to rand(9999999) and change the center method length to 7 so it looks like this.</p>
+
+<p><div class='bogus-wrapper'><notextile><figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='ruby'><span class='line'><span class="nb">rand</span><span class="p">(</span><span class="mi">9999999</span><span class="p">)</span><span class="o">.</span><span class="n">to_s</span><span class="o">.</span><span class="n">center</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="nb">rand</span><span class="p">(</span><span class="mi">9</span><span class="p">)</span><span class="o">.</span><span class="n">to_s</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div></p>
+
+<p>Hope this is helpful to someone.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Subversion script for Rails developers]]></title>
+    <link href="http://randomutterings.github.io/blog/subversion-script-for-rails-developers/"/>
+    <updated>2007-09-19T18:32:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/subversion-script-for-rails-developers</id>
+    <content type="html"><![CDATA[<p>I read somewhere that good developers use version control.  There's a good article on <a href="http://wiki.rubyonrails.org/rails/pages/HowtoUseRailsWithSubversion">HowtoUseRailsWithSubversion</a>.</p>
+
+<p>So why should I repeat those steps for every new project I work on.</p>
+
+<!-- more -->
+
+
+<p>There is another <a href="http://www.railsonwave.com/railsonwave/2006/12/19/smart-subversion-script-for-rails-projects">article</a> which attempted to tackle this problem.  However, you still have to do the initial steps and then copy this script into your project directory and execute it.</p>
+
+<p>The following script takes it a bit farther.  You call it like this.</p>
+
+<pre><code>rails-svn app_dir repository username
+</code></pre>
+
+<p>So if I wanted to create a new rails project called toejam, I would execute:</p>
+
+<pre><code>rails-svn toejam svn://randomutterings.com/projects/toejam/trunk chris
+</code></pre>
+
+<p>Here's what happens under the hood.</p>
+
+<ol>
+<li><p>After checking to make sure the directory doesn't already exist, your rails app is created with the standard rails command.  (If the directory already exists, you will be asked if you want to continue.  Choosing yes will allow the script to continue but if this script has been run on the same app twice, all of the svn commits will be duplicated.)</p></li>
+<li><p>Your new app is imported to the subversion repository specified.  Authentication is done with the username provided.  You may be prompted for a password from your repository.</p></li>
+<li><p>The original app directory is deleted and a working copy is checked out from the repository into that directory.</p></li>
+<li><p>All the default rails log files are removed and subversion is instructed to ignore those files.  (Log files can get large and we definitely don't need them in version control.)</p></li>
+<li><p>The database.yml is moved to database.example to serve as a template for anyone who checks out the code and any newly created database.yml files are ignored by subversion.  (Doing this will help if you have multiple developers working on the same project in different environments.  It also prevents you from overwriting the database.yml file on the production server, oops!</p></li>
+<li><p>Subversion is told to ignore everything in the tmp folder, the .htaccess files, and the dispatch.fcgi file.</p></li>
+</ol>
+
+
+<p>Without further ado, here's the script.  Just copy it and save it somewhere in your path.  /usr/bin is a good choice.  Don't forget to chmod 755 so you can execute it.</p>
+
+<p><div class='bogus-wrapper'><notextile><figure class='code'> <div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>  <span class="c">#!/bin/bash&lt;/p&gt;</span>
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;  <span class="k">if</span> <span class="o">[</span> <span class="s2">&quot;$#&quot;</span> !<span class="o">=</span> <span class="s2">&quot;3&quot;</span> <span class="o">]</span>; <span class="k">then</span>&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;echo <span class="s2">&quot;Usage: rails-svn app_dir repository username&quot;</span>
+</span><span class='line'><span class="nb">exit </span>1
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;  <span class="k">fi</span>&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;  <span class="nv">APPDIR</span><span class="o">=</span>./<span class="nv">$1</span>
+</span><span class='line'>  <span class="nv">SVN_TRUNK</span><span class="o">=</span><span class="nv">$2</span>
+</span><span class='line'>  <span class="nv">SVN_USER</span><span class="o">=</span><span class="nv">$3</span>&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;  <span class="k">function </span>check_if_exist <span class="o">()</span> <span class="o">{</span>&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;if <span class="o">[[</span> -e <span class="nv">$1</span> <span class="o">]]</span>; <span class="k">then</span>
+</span><span class='line'><span class="k">  </span><span class="nb">echo</span> <span class="s2">&quot;&quot;</span>
+</span><span class='line'>  <span class="nb">echo</span> <span class="s2">&quot;$1 already exists, overwrite? y or n&quot;</span>
+</span><span class='line'>  <span class="nb">echo</span> <span class="s2">&quot;&quot;</span>
+</span><span class='line'>  <span class="nb">read </span>OVERWRITE
+</span><span class='line'>  <span class="k">case</span> <span class="s2">&quot;$OVERWRITE&quot;</span> in
+</span><span class='line'>y<span class="o">)</span>
+</span><span class='line'>  <span class="nb">echo</span> <span class="s2">&quot;Overwriting...&quot;</span>
+</span><span class='line'>    ;;
+</span><span class='line'>*<span class="o">)</span>
+</span><span class='line'>  <span class="nb">echo</span> <span class="s2">&quot;Action canceled&quot;</span>
+</span><span class='line'>  <span class="nb">exit </span>1
+</span><span class='line'>    ;;
+</span><span class='line'>  <span class="k">esac</span>
+</span><span class='line'><span class="k">fi</span>
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;  <span class="o">}</span>&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;  check_if_exist <span class="k">${</span><span class="nv">APPDIR</span><span class="k">}</span>
+</span><span class='line'>  rails <span class="nv">$APPDIR</span>
+</span><span class='line'>  svn import <span class="nv">$APPDIR</span> <span class="nv">$SVN_TRUNK</span> -m <span class="s2">&quot;Import&quot;</span> --username <span class="nv">$SVN_USER</span>
+</span><span class='line'>  sudo rm -r <span class="nv">$APPDIR</span>
+</span><span class='line'>  svn checkout <span class="nv">$SVN_TRUNK</span> <span class="nv">$APPDIR</span>
+</span><span class='line'>  <span class="nb">cd</span> <span class="nv">$APPDIR</span>&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;  svn remove log/&lt;em&gt;
+</span><span class='line'>  svn commit -m <span class="s2">&quot;removing log files&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;&lt;/em&gt;.log&quot;</span> log/
+</span><span class='line'>  svn update log/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring all files in /log/ ending in .log&quot;</span>
+</span><span class='line'>  svn move config/database.yml config/database.example
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Moving database.yml to database.example to provide a template for anyone who checks out the code&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;database.yml&quot;</span> config/
+</span><span class='line'>  svn update config/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring database.yml&quot;</span>
+</span><span class='line'>  svn remove tmp/&lt;em&gt;
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;&lt;/em&gt;&quot;</span> tmp/
+</span><span class='line'>  svn update tmp/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;ignore tmp/ content from now&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;.htaccess&quot;</span> public/
+</span><span class='line'>  svn update public/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring .htaccess&quot;</span>
+</span><span class='line'>  svn propset svn:ignore <span class="s2">&quot;dispatch.fcgi&quot;</span> public/
+</span><span class='line'>  svn update public/
+</span><span class='line'>  svn commit -m <span class="s2">&quot;Ignoring dispatch.fcgi&quot;</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+I'm interested in converting this into a gem and possibly rewriting it in ruby.  If anyone has the skills and wants to contribute, leave a comment or <a href="mailto:randomutterings@gmail.com">email me</a>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Rapt error during peepcodes test first development tutorial]]></title>
+    <link href="http://randomutterings.github.io/blog/rapt-error-during-peepcodes-test-first-development-tutorial/"/>
+    <updated>2007-09-13T13:57:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/rapt-error-during-peepcodes-test-first-development-tutorial</id>
+    <content type="html"><![CDATA[<p>OK, let me start off by saying, I love the tutorials from peepcode, you guys are doing a great job so keep doing it.</p>
+
+<p>Alas, I got stuck while watching the <a href="http://peepcode.com/products/test-first-development">Test-first-development</a> tutorial.  They were using <a href="http://rapt.rubyforge.org/">Rapt</a> as an alternative to script/plugin and when I tried to run it I kept getting an error.</p>
+
+<!-- more -->
+
+
+<pre><code>Error: RaPT currently does not work outside of a Rails application directory.  Please change to the top level of a Rails application and try again.
+</code></pre>
+
+<p>This error is misleading but at least it was obviously misleading, after all I know I'm in my Rails application directory.</p>
+
+<p>After some googling, I found a post describing a work around for the problem, but it basically gave instructions on installing the plugin with script/plugin.  But the guys at peepcode had a reason for using rapt over script/plugin (its faster).  So I Google some more.  I finally find a <a href="http://rubyforge.org/tracker/index.php?func=detail&amp;aid=6611&amp;group_id=1889&amp;atid=7384">bug</a> on the Rapt <a href="http://rubyforge.org/projects/rapt/">Trac</a> posted in 2006 that explains that the user must first add repositories by executing the following.</p>
+
+<pre><code>rapt discover
+</code></pre>
+
+<p>If anyone knows how to have it default to yes without prompting you for every repository, please post a comment.</p>
+
+<p>Alternatively, you can add only the repositories you want to use by executing the following.</p>
+
+<pre><code>rapt source http://path-to-repository
+</code></pre>
+]]></content>
+  </entry>
+  
+</feed>

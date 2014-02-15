@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Git | Randomutterings]]></title>
+  <link href="http://randomutterings.github.io/blog/categories/git/atom.xml" rel="self"/>
+  <link href="http://randomutterings.github.io/"/>
+  <updated>2014-02-14T22:11:32-05:00</updated>
+  <id>http://randomutterings.github.io/</id>
+  <author>
+    <name><![CDATA[Chris Barnes]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Undo Git Commit]]></title>
+    <link href="http://randomutterings.github.io/blog/undo-git-commit/"/>
+    <updated>2010-04-18T19:02:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/undo-git-commit</id>
+    <content type="html"><![CDATA[<p>I just made a commit to a public project and pushed the changes up to github.  Then I realized that I left some confidential information in one of the files.  Searching online lead to a couple of different ways to fix this (git rebase, and git filter-branch), neither of which were working well for me.</p>
+
+<p>I finally figured out that doing the following would work as long as the confidential information were only included in the last commit.</p>
+
+<p>First update the file and remove the confidential info.</p>
+
+<pre><code>git add my-file-with-confidential-info
+git commit --amend
+</code></pre>
+
+<p>(this will add what's in your current staging area to the last commit)</p>
+
+<pre><code>git push origin +master
+</code></pre>
+
+<p>(force push your changes to github)</p>
+
+<p>Hope this helps someone else.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Installing git on linux]]></title>
+    <link href="http://randomutterings.github.io/blog/installing-git-on-linux/"/>
+    <updated>2008-04-24T18:41:00-04:00</updated>
+    <id>http://randomutterings.github.io/blog/installing-git-on-linux</id>
+    <content type="html"><![CDATA[<p>Trying to install git from source on our linux server (we're running RHEL4 at work) and I was getting an error running make.</p>
+
+<pre><code>undefined reference to `libiconv'
+</code></pre>
+
+<p>Running make like this worked.</p>
+
+<pre><code>make install CFLAGS="-liconv"
+</code></pre>
+
+<p>But after the install was finished, running git barfed at me about loading a shared library libiconv.so.2.</p>
+
+<p>I had to edit /etc/ld.so.conf and add /usr/local/lib and run ldconfig.</p>
+
+<p>Credit Mark Turner for the ldconfig tip.  Thanks man.</p>
+]]></content>
+  </entry>
+  
+</feed>
